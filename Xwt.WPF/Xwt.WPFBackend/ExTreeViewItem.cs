@@ -65,12 +65,22 @@ namespace Xwt.WPFBackend
 
 		protected override void OnCollapsed(RoutedEventArgs e)
 		{
+			var node = DataContext as TreeStoreNode;
+			if (node == null) {
+				return;
+			}
 			if (!IsExpanded)
 				UnselectChildren((object o, ExTreeViewItem i) =>
 				{
 					return i != this;
 				});
+			view.Backend.Context.InvokeUserCode (delegate {
+				((ITreeViewEventSink)view.Backend.EventSink).OnRowCollapsing (node);
+			});
 			base.OnCollapsed(e);
+			view.Backend.Context.InvokeUserCode (delegate {
+				((ITreeViewEventSink)view.Backend.EventSink).OnRowCollapsed (node);
+			});
 		}
 
 		public int Level {
@@ -120,6 +130,19 @@ namespace Xwt.WPFBackend
 			view.SelectItem(this);
 			e.Handled = true;
 			base.OnMouseLeftButtonDown(e);
+		}
+
+		protected override void OnMouseDoubleClick(MouseButtonEventArgs e)
+		{
+			if ((view.Backend as TreeViewBackend)?.RowActivatedEventEnabled == true && IsSelected)
+			{
+				var node = (TreeStoreNode)DataContext;
+				view.Backend.Context.InvokeUserCode(delegate
+				{
+					((ITreeViewEventSink)view.Backend.EventSink).OnRowActivated(node);
+				});
+			}
+			base.OnMouseDoubleClick(e);
 		}
 
 		private ExTreeView TreeView

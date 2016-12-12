@@ -98,7 +98,7 @@ namespace Xwt
 			get { return label ?? ""; }
 			set {
 				label = value;
-				Backend.SetContent (label, UseMnemonic, image != null ? image.ImageDescription : ImageDescription.Null, imagePosition);
+				Backend.SetContent (label, UseMnemonic, image != null ? image.GetImageDescription (BackendHost.ToolkitEngine) : ImageDescription.Null, imagePosition);
 				OnPreferredSizeChanged ();
 			}
 		}
@@ -118,7 +118,7 @@ namespace Xwt
 			{ 
 				if (useMnemonic == value)
 					return;
-				Backend.SetContent (label, value, image != null ? image.ImageDescription : ImageDescription.Null, imagePosition);
+				Backend.SetContent (label, value, image != null ? image.GetImageDescription (BackendHost.ToolkitEngine) : ImageDescription.Null, imagePosition);
 				useMnemonic = value;
 			}
 		}
@@ -128,7 +128,7 @@ namespace Xwt
 			get { return image; }
 			set {
 				image = value;
-				Backend.SetContent (label, UseMnemonic, image != null ? image.ImageDescription : ImageDescription.Null, imagePosition);
+				Backend.SetContent (label, UseMnemonic, image != null ? image.GetImageDescription (BackendHost.ToolkitEngine) : ImageDescription.Null, imagePosition);
 				OnPreferredSizeChanged ();
 			}
 		}
@@ -138,7 +138,7 @@ namespace Xwt
 			get { return imagePosition; }
 			set {
 				imagePosition = value;
-				Backend.SetContent (label, UseMnemonic, image != null ? image.ImageDescription : ImageDescription.Null, imagePosition);
+				Backend.SetContent (label, UseMnemonic, image != null ? image.GetImageDescription (BackendHost.ToolkitEngine) : ImageDescription.Null, imagePosition);
 				OnPreferredSizeChanged ();
 			}
 		}
@@ -161,6 +161,11 @@ namespace Xwt
 				Backend.SetButtonType (type);
 				OnPreferredSizeChanged ();
 			}
+		}
+
+		public Color LabelColor {
+			get { return Backend.LabelColor; }
+			set { Backend.LabelColor = value; }
 		}
 		
 		protected virtual void OnClicked (EventArgs e)

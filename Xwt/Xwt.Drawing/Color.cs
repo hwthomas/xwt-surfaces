@@ -33,7 +33,7 @@ namespace Xwt.Drawing
 	[TypeConverter (typeof(ColorValueConverter))]
 	[ValueSerializer (typeof(ColorValueSerializer))]
 	[Serializable]
-	public struct Color
+	public struct Color : IEquatable<Color>
 	{
 		double r, g, b, a;
 
@@ -149,7 +149,6 @@ namespace Xwt.Drawing
 		/// Returns a color which looks more contrasted (or less, if amount is negative)
 		/// </summary>
 		/// <returns>The new color</returns>
-		/// <param name="referenceColor">Reference color.</param>
 		/// <param name="amount">Amount to change (can be positive or negative).</param>
 		/// <remarks>
 		/// This method adds or removes light to/from the color to make it more contrasted when
@@ -278,6 +277,11 @@ namespace Xwt.Drawing
 		
 			return (this == (Color) o);
 		}
+
+		public bool Equals(Color other)
+		{
+			return this == other;
+		}
 		
 		public override int GetHashCode ()
 		{
@@ -294,10 +298,22 @@ namespace Xwt.Drawing
 		{
 			return string.Format ("[Color: Red={0}, Green={1}, Blue={2}, Alpha={3}]", Red, Green, Blue, Alpha);
 		}
+
+		public string ToHexString (bool withAlpha = true)
+		{
+			var rgb = "#" + ((int)(Red * 255)).ToString ("x2") + ((int)(Green * 255)).ToString ("x2") + ((int)(Blue * 255)).ToString ("x2");
+
+			if (withAlpha)
+				return rgb + ((int)(Alpha * 255)).ToString ("x2");
+			else
+				return rgb;
+		}
 	}
 
 	class ColorValueConverter: TypeConverter
 	{
+		static readonly ColorValueSerializer serializer = new ColorValueSerializer ();
+
 		public override bool CanConvertTo (ITypeDescriptorContext context, Type destinationType)
 		{
 			return destinationType == typeof(string);
@@ -306,6 +322,16 @@ namespace Xwt.Drawing
 		public override bool CanConvertFrom (ITypeDescriptorContext context, Type sourceType)
 		{
 			return sourceType == typeof(string);
+		}
+
+		public override object ConvertTo (ITypeDescriptorContext context, System.Globalization.CultureInfo culture, object value, Type destinationType)
+		{
+			return serializer.ConvertToString (value, null);
+		}
+
+		public override object ConvertFrom (ITypeDescriptorContext context, System.Globalization.CultureInfo culture, object value)
+		{
+			return serializer.ConvertFromString ((string)value, null);
 		}
 	}
 	
@@ -324,13 +350,13 @@ namespace Xwt.Drawing
 		public override string ConvertToString (object value, IValueSerializerContext context)
 		{
 			Color s = (Color) value;
-			return "#" + ((int)(s.Red * 255)).ToString ("x2") + ((int)(s.Green * 255)).ToString ("x2") + ((int)(s.Blue * 255)).ToString ("x2") + ((int)(s.Alpha * 255)).ToString ("x2");
+			return s.ToHexString ();
 		}
 		
 		public override object ConvertFromString (string value, IValueSerializerContext context)
 		{
 			Color c;
-			if (!Color.TryParse (value, out c))
+			if (Color.TryParse (value, out c))
 				return c;
 			else
 				throw new InvalidOperationException ("Could not parse color value: " + value);

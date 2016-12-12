@@ -29,6 +29,7 @@
 using System;
 using System.Collections.Specialized;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -39,7 +40,6 @@ using SWC = System.Windows.Controls; // When we need to resolve ambigituies.
 using SW = System.Windows; // When we need to resolve ambigituies.
 
 using Xwt.Backends;
-
 using Color = Xwt.Drawing.Color;
 
 namespace Xwt.WPFBackend
@@ -178,6 +178,12 @@ namespace Xwt.WPFBackend
 			set { Widget.Opacity = value; }
 		}
 
+		public string Name
+		{
+			get { return Widget.Name; }
+			set { Widget.Name = value; }
+		}
+
 		FontData GetWidgetFont ()
 		{
 			if (!(Widget is Control)) {
@@ -216,6 +222,15 @@ namespace Xwt.WPFBackend
 
 		public void SetFocus ()
 		{
+			if (Widget.IsLoaded)
+				Widget.Focus ();
+			else
+				Widget.Loaded += DeferredFocus;
+		}
+
+		void DeferredFocus (object sender, RoutedEventArgs e)
+		{
+			Widget.Loaded -= DeferredFocus;
 			Widget.Focus ();
 		}
 
@@ -234,8 +249,16 @@ namespace Xwt.WPFBackend
 		}
 
 		public string TooltipText {
-			get { return Widget.ToolTip.ToString (); }
-			set { Widget.ToolTip = value; }
+			get { return Widget.ToolTip == null ? null : ((ToolTip)Widget.ToolTip).Content.ToString (); }
+			set {
+				var tp = Widget.ToolTip as ToolTip;
+				if (tp == null)
+					Widget.ToolTip = tp = new ToolTip ();
+				tp.Content = value ?? string.Empty;
+				ToolTipService.SetIsEnabled (Widget, value != null);
+				if (tp.IsOpen && value == null)
+					tp.IsOpen = false;
+			}
 		}
 
 		public static FrameworkElement GetFrameworkElement (IWidgetBackend backend)
@@ -245,7 +268,7 @@ namespace Xwt.WPFBackend
 
 		public Point ConvertToScreenCoordinates (Point widgetCoordinates)
 		{
-			var p = Widget.PointToScreen (new System.Windows.Point (
+			var p = Widget.PointToScreenDpiAware (new System.Windows.Point (
 				widgetCoordinates.X, widgetCoordinates.Y));
 
 			return new Point (p.X, p.Y);
@@ -293,6 +316,10 @@ namespace Xwt.WPFBackend
 		public System.Windows.Size MeasureOverride (System.Windows.Size constraint, System.Windows.Size wpfMeasure)
 		{
 			var defNaturalSize = eventSink.GetDefaultNaturalSize ();
+			if (!double.IsPositiveInfinity (constraint.Width))
+				defNaturalSize.Width = Math.Min (defNaturalSize.Width, constraint.Width);
+			if (!double.IsPositiveInfinity (constraint.Height))
+				defNaturalSize.Height = Math.Min (defNaturalSize.Height, constraint.Height);
 
 			// -2 means use the WPF default, -1 use the XWT default, any other other value is used as custom natural size
 			var nw = DefaultNaturalWidth;
@@ -416,6 +443,16 @@ namespace Xwt.WPFBackend
 				Widget.Cursor = Cursors.SizeWE;
 			else if (cursor == CursorType.ResizeLeftRight)
 				widget.Cursor = Cursors.SizeWE;
+			else if (cursor == CursorType.Move)
+				widget.Cursor = Cursors.SizeAll;
+			else if (cursor == CursorType.Wait)
+				widget.Cursor = Cursors.Wait;
+			else if (cursor == CursorType.Help)
+				widget.Cursor = Cursors.Help;
+			else if (cursor == CursorType.Invisible)
+				widget.Cursor = Cursors.None;
+			else
+				Widget.Cursor = Cursors.Arrow;
 		}
 		
 		public virtual void UpdateLayout ()
@@ -428,10 +465,13 @@ namespace Xwt.WPFBackend
 				var ev = (WidgetEvent)eventId;
 				switch (ev) {
 					case WidgetEvent.KeyPressed:
-						Widget.KeyDown += WidgetKeyDownHandler;
+						Widget.PreviewKeyDown += WidgetKeyDownHandler;
 						break;
 					case WidgetEvent.KeyReleased:
-						Widget.KeyUp += WidgetKeyUpHandler;
+						Widget.PreviewKeyUp += WidgetKeyUpHandler;
+						break;
+					case WidgetEvent.TextInput:
+						TextCompositionManager.AddPreviewTextInputHandler(Widget, WidgetPreviewTextInputHandler);
 						break;
 					case WidgetEvent.ButtonPressed:
 						Widget.MouseDown += WidgetMouseDownHandler;
@@ -479,10 +519,13 @@ namespace Xwt.WPFBackend
 				var ev = (WidgetEvent)eventId;
 				switch (ev) {
 					case WidgetEvent.KeyPressed:
-						Widget.KeyDown -= WidgetKeyDownHandler;
+						Widget.PreviewKeyDown -= WidgetKeyDownHandler;
 						break;
 					case WidgetEvent.KeyReleased:
-						Widget.KeyUp -= WidgetKeyUpHandler;
+						Widget.PreviewKeyUp -= WidgetKeyUpHandler;
+						break;
+					case WidgetEvent.TextInput:
+						TextCompositionManager.RemovePreviewTextInputHandler(Widget, WidgetPreviewTextInputHandler);
 						break;
 					case WidgetEvent.ButtonPressed:
 						Widget.MouseDown -= WidgetMouseDownHandler;
@@ -577,8 +620,19 @@ namespace Xwt.WPFBackend
 			if ((int)key == 0)
 				return false;
 
-			result = new KeyEventArgs (key, KeyboardUtil.GetModifiers (), e.IsRepeat, e.Timestamp);
+			result = new KeyEventArgs (key, (int)e.Key, KeyboardUtil.GetModifiers (), e.IsRepeat, e.Timestamp);
 			return true;
+		}
+
+		void WidgetPreviewTextInputHandler (object sender, System.Windows.Input.TextCompositionEventArgs e)
+		{
+			TextInputEventArgs args = new TextInputEventArgs(e.Text);
+			Context.InvokeUserCode(delegate
+			{
+				eventSink.OnTextInput(args);
+			});
+			if (args.Handled)
+				e.Handled = true;
 		}
 
 		void WidgetMouseDownHandler (object o, MouseButtonEventArgs e)
@@ -638,15 +692,7 @@ namespace Xwt.WPFBackend
 
 		private SW.Window GetParentWindow()
 		{
-			FrameworkElement current = Widget;
-			while (current != null) {
-				if (current is SW.Window)
-					return (SW.Window)current;
-
-				current = VisualTreeHelper.GetParent (current) as FrameworkElement;
-			}
-
-			return null;
+			return Widget.GetParentWindow ();
 		}
 
 		public void DragStart (DragStartData data)
@@ -704,6 +750,7 @@ namespace Xwt.WPFBackend
 				return; // Drag auto detect has been already activated.
 
 			DragDropInfo.AutodetectDrag = true;
+			DragDropInfo.TargetTypes = types == null ? new TransferDataType [0] : types;
 			Widget.MouseUp += WidgetMouseUpForDragHandler;
 			Widget.MouseMove += WidgetMouseMoveForDragHandler;
 		}
@@ -846,7 +893,7 @@ namespace Xwt.WPFBackend
 
 		void CheckDrop (object sender, System.Windows.DragEventArgs e)
 		{
-			var types = e.Data.GetFormats ().Select (t => t.ToXwtTransferType ()).ToArray ();
+			var types = e.Data.GetFormats ().Select (DataConverter.ToXwtTransferType).ToArray ();
 			var pos = e.GetPosition (Widget).ToXwtPoint ();
 			var proposedAction = DetectDragAction (e.KeyStates);
 
@@ -896,7 +943,7 @@ namespace Xwt.WPFBackend
 
 			WidgetDragLeaveHandler (sender, e);
 
-			var types = e.Data.GetFormats ().Select (t => t.ToXwtTransferType ()).ToArray ();
+			var types = e.Data.GetFormats ().Select (DataConverter.ToXwtTransferType).ToArray ();
 			var pos = e.GetPosition (Widget).ToXwtPoint ();
 			var actualEffect = currentDragEffect;
 
@@ -984,9 +1031,44 @@ namespace Xwt.WPFBackend
 			if (Widget.IsVisible)
 				Context.InvokeUserCode (this.eventSink.OnBoundsChanged);
 		}
+
+		Task IDispatcherBackend.InvokeAsync(Action action)
+		{
+			var ts = new TaskCompletionSource<int>();
+			var result = Widget.Dispatcher.BeginInvoke((Action)delegate
+			{
+				try
+				{
+					action();
+					ts.SetResult(0);
+				}
+				catch (Exception ex)
+				{
+					ts.SetException(ex);
+				}
+			}, null);
+			return ts.Task;
+		}
+
+		Task<T> IDispatcherBackend.InvokeAsync<T>(Func<T> func)
+		{
+			var ts = new TaskCompletionSource<T>();
+			var result = Widget.Dispatcher.BeginInvoke((Action)delegate
+			{
+				try
+				{
+					ts.SetResult(func());
+				}
+				catch (Exception ex)
+				{
+					ts.SetException(ex);
+				}
+			}, null);
+			return ts.Task;
+		}
 	}
 
-	public interface IWpfWidgetBackend
+	public interface IWpfWidgetBackend : IDispatcherBackend
 	{
 		FrameworkElement Widget { get; }
 	}

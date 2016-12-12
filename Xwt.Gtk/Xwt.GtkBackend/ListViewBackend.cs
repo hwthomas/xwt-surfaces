@@ -88,6 +88,21 @@ namespace Xwt.GtkBackend
 			Widget.Selection.UnselectIter (it);
 		}
 
+		public void ScrollToRow (int row)
+		{
+			Gtk.TreeIter it;
+			if (!Widget.Model.IterNthChild (out it, row))
+				return;
+			ScrollToRow (it);
+		}
+
+		public void StartEditingCell (int row, CellView cell)
+		{
+			var col = GetCellColumn (cell);
+			if (col != null)
+				Widget.SetCursor (new Gtk.TreePath (new [] { row }), col, true);
+		}
+
 		public int[] SelectedRows {
 			get {
 				var sel = Widget.Selection.GetSelectedRows ();
@@ -96,6 +111,26 @@ namespace Xwt.GtkBackend
 					res [n] = sel [n].Indices[0];
 				return res;
 			}
+		}
+
+		public int FocusedRow {
+			get {
+				Gtk.TreePath path;
+				Gtk.TreeViewColumn column;
+				Widget.GetCursor (out path, out column);
+				if (path == null)
+					return -1;
+				return path.Indices [0];
+			}
+			set {
+				Gtk.TreePath path = new Gtk.TreePath (new [] { value >= 0 ? value : int.MaxValue });
+				Widget.SetCursor (path, null, false);
+			}
+		}
+
+		public int CurrentEventRow {
+			get;
+			internal set;
 		}
 
 		public bool BorderVisible {
@@ -124,6 +159,51 @@ namespace Xwt.GtkBackend
 			set {
 				Widget.HeadersVisible = value;
 			}
+		}
+
+		public int GetRowAtPosition (Point p)
+		{
+			Gtk.TreePath path = GetPathAtPosition (p);
+			if (path != null)
+				return path.Indices [0];
+			return -1;
+		}
+
+		public Rectangle GetCellBounds (int row, CellView cell, bool includeMargin)
+		{
+			var col = GetCellColumn (cell);
+			var cr = GetCellRenderer (cell);
+			Gtk.TreePath path = new Gtk.TreePath (new [] { row });
+
+			Gtk.TreeIter iter;
+			if (!Widget.Model.GetIterFromString (out iter, path.ToString ()))
+				return Rectangle.Zero;
+
+			if (includeMargin)
+				return ((ICellRendererTarget)this).GetCellBackgroundBounds (col, cr, iter);
+			else
+				return ((ICellRendererTarget)this).GetCellBounds (col, cr, iter);
+		}
+
+		public Rectangle GetRowBounds (int row, bool includeMargin)
+		{
+			Gtk.TreePath path = new Gtk.TreePath (new [] { row });
+			Gtk.TreeIter iter;
+			if (!Widget.Model.GetIterFromString (out iter, path.ToString ()))
+				return Rectangle.Zero;
+
+			if (includeMargin)
+				return GetRowBackgroundBounds (iter);
+			else
+				return GetRowBounds (iter);
+		}
+
+		public override void SetCurrentEventRow (string path)
+		{
+			if (path.Contains (":")) {
+				path = path.Split (':') [0];
+			}
+			CurrentEventRow = int.Parse (path);
 		}
 	}
 }

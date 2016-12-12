@@ -30,11 +30,16 @@ using System.ComponentModel;
 using System.Collections.Generic;
 using System.Reflection;
 using Xwt.Backends;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Xwt
 {
+	/// <summary>
+	/// The base class for all Xwt components.
+	/// </summary>
 	[System.ComponentModel.DesignerCategory ("Code")]
-	public abstract class XwtComponent : Component, IFrontend
+	public abstract class XwtComponent : Component, IFrontend, ISynchronizeInvoke
 	{
 		BackendHost backendHost;
 		
@@ -44,11 +49,19 @@ namespace Xwt
 			backendHost.Parent = this;
 		}
 		
+		/// <summary>
+		/// Creates the backend host.
+		/// </summary>
+		/// <returns>The backend host.</returns>
 		protected virtual BackendHost CreateBackendHost ()
 		{
 			return new BackendHost ();
 		}
 
+		/// <summary>
+		/// Gets the backend host.
+		/// </summary>
+		/// <value>The backend host.</value>
 		protected BackendHost BackendHost {
 			get { return backendHost; }
 		}
@@ -61,64 +74,182 @@ namespace Xwt
 			get { return backendHost.Backend; }
 		}
 
+		/// <summary>
+		/// Gets or sets the name of this component.
+		/// </summary>
+		/// <value>The components name.</value>
+		/// <remarks>The name can be used to identify this component by e.g. designers.</remarks>
+		[DefaultValue (null)]
+		virtual public string Name { get; set; }
+
+		/// <summary>
+		/// A value, that can be used to identify this component
+		/// </summary>
+		virtual public object Tag { get; set; }
+
+		/// <summary>
+		/// Maps an event handler of an Xwt component to an event identifier.
+		/// </summary>
+		/// <param name="eventId">The event identifier (must be valid event enum value
+		/// like <see cref="Xwt.Backends.WidgetEvent"/>, identifying component specific events).</param>
+		/// <param name="type">The Xwt component type.</param>
+		/// <param name="methodName">The <see cref="System.Reflection.MethodInfo.Name"/> of the event handler.</param>
 		protected static void MapEvent (object eventId, Type type, string methodName)
 		{
-			EventUtil.MapEvent (eventId, type, methodName);
+			EventHost.MapEvent (eventId, type, methodName);
 		}
 		
+		/// <summary>
+		/// Verifies that the constructor is not called from a sublass.
+		/// </summary>
+		/// <param name="t">This constructed base instance.</param>
+		/// <typeparam name="T">The base type to verify the constructor for.</typeparam>
 		internal void VerifyConstructorCall<T> (T t)
 		{
 			if (GetType () != typeof(T))
 				throw new InvalidConstructorInvocation (typeof(T));
 		}
+
+
+		/// <summary>
+		/// Invokes an action in the GUI thread.
+		/// </summary>
+		public Task InvokeAsync(Action action)
+		{
+			if (action == null)
+				throw new ArgumentNullException(nameof(action));
+			var dispatcher = backendHost.Backend as IDispatcherBackend;
+			if (dispatcher != null)
+				return dispatcher.InvokeAsync(() => backendHost.ToolkitEngine.InvokeAndThrow(action));
+			return Application.InvokeAsync(() => backendHost.ToolkitEngine.InvokeAndThrow(action));
+		}
+
+		/// <summary>
+		/// Invokes a function in the GUI thread.
+		/// </summary>
+		public Task<T> InvokeAsync<T>(Func<T> func)
+		{
+			if (func == null)
+				throw new ArgumentNullException(nameof(func));
+			Func<T> funcCall = () =>
+					{
+						T result = default(T);
+						backendHost.ToolkitEngine.InvokeAndThrow(() => result = func());
+						return result;
+					};
+			var dispatcher = backendHost.Backend as IDispatcherBackend;
+			if (dispatcher != null)
+				return dispatcher.InvokeAsync(funcCall);
+			return Application.InvokeAsync(funcCall);
+		}
+
+		#region ISynchronizeInvoke implementation
+
+		IAsyncResult ISynchronizeInvoke.BeginInvoke (Delegate method, object[] args)
+		{
+			var asyncResult = new AsyncInvokeResult (backendHost.Backend);
+			asyncResult.Invoke (method, args);
+			return asyncResult;
+		}
+
+		object ISynchronizeInvoke.EndInvoke (IAsyncResult result)
+		{
+			var xwtResult = result as AsyncInvokeResult;
+			if (xwtResult != null) {
+				xwtResult.AsyncResetEvent.Wait ();
+				if (xwtResult.Exception != null)
+					throw xwtResult.Exception;
+			} else {
+				result.AsyncWaitHandle.WaitOne ();
+			}
+
+			return result.AsyncState;
+		}
+
+		object ISynchronizeInvoke.Invoke (Delegate method, object[] args)
+		{
+			return ((ISynchronizeInvoke)this).EndInvoke (((ISynchronizeInvoke)this).BeginInvoke (method, args));
+		}
+
+		bool ISynchronizeInvoke.InvokeRequired {
+			get {
+				return Application.UIThread != Thread.CurrentThread;
+			}
+		}
+
+		#endregion
 	}
-	
-	class EventUtil
+
+	class AsyncInvokeResult : IAsyncResult
 	{
-		static Dictionary<Type, List<EventMap>> overridenEventMap = new Dictionary<Type, List<EventMap>> ();
-		static Dictionary<Type, HashSet<object>> overridenEvents = new Dictionary<Type, HashSet<object>> ();
-		
-		public static void MapEvent (object eventId, Type type, string methodName)
+		ManualResetEventSlim asyncResetEvent = new ManualResetEventSlim (false);
+		IDispatcherBackend dispatcher;
+
+		public AsyncInvokeResult(IBackend backend)
 		{
-			List<EventMap> events;
-			if (!overridenEventMap.TryGetValue (type, out events)) {
-				events = new List<EventMap> ();
-				overridenEventMap [type] = events;
-			}
-			EventMap emap = new EventMap () {
-				MethodName = methodName,
-				EventId = eventId
-			};
-			events.Add (emap);
+			dispatcher = backend as IDispatcherBackend;
+			this.asyncResetEvent = new ManualResetEventSlim();
 		}
-		
-		public static HashSet<object> GetDefaultEnabledEvents (Type type, Func<IEnumerable<object>> customEnabledEvents)
+
+		internal void Invoke (Delegate method, object[] args)
 		{
-			HashSet<object> defaultEnabledEvents;
-			if (!overridenEvents.TryGetValue (type, out defaultEnabledEvents)) {
-				defaultEnabledEvents = new HashSet<object> ();
-				Type t = type;
-				while (t != typeof(Component)) {
-					List<EventMap> emaps;
-					if (overridenEventMap.TryGetValue (t, out emaps)) {
-						foreach (var emap in emaps) {
-							if (IsOverriden (emap, type, t))
-								defaultEnabledEvents.Add (emap.EventId);
-						}
-					}
-					t = t.BaseType;
+			Action methodCall = () => {
+				try {
+					AsyncState = method.DynamicInvoke(args);
+				} catch (Exception ex) {
+					Exception = ex;
+				} finally {
+					IsCompleted = true;
+					asyncResetEvent.Set ();
 				}
-				defaultEnabledEvents.UnionWith (customEnabledEvents ());
-				overridenEvents [type] = defaultEnabledEvents;
+			};
+			if (dispatcher != null)
+				dispatcher.InvokeAsync (methodCall);
+			else
+				Application.Invoke (methodCall);
+		}
+
+		#region IAsyncResult implementation
+
+		public object AsyncState {
+			get;
+			private set;
+		}
+
+		public Exception Exception {
+			get;
+			private set;
+		}
+
+		internal ManualResetEventSlim AsyncResetEvent {
+			get {
+				return asyncResetEvent;
 			}
-			return defaultEnabledEvents;
 		}
-		
-		static bool IsOverriden (EventMap emap, Type thisType, Type t)
-		{
-			var method = thisType.GetMethod (emap.MethodName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-			return method.DeclaringType != t;
+
+		public WaitHandle AsyncWaitHandle {
+			get {
+				if (asyncResetEvent == null) {
+					asyncResetEvent = new ManualResetEventSlim(false);
+
+					if (IsCompleted)
+						asyncResetEvent.Set();
+				}
+				return asyncResetEvent.WaitHandle;
+			}
 		}
+
+		public bool CompletedSynchronously { get { return false; } }
+
+
+		public bool IsCompleted {
+			get;
+			private set;
+		}
+
+		#endregion
+
+
 	}
 }
 

@@ -95,6 +95,12 @@ namespace Xwt
 			set { Backend.BorderVisible = value; }
 		}
 
+		public GridLines GridLinesVisible
+		{
+			get { return Backend.GridLinesVisible; }
+			set { Backend.GridLinesVisible = value; }
+		}
+
 		public ScrollPolicy VerticalScrollPolicy {
 			get { return Backend.VerticalScrollPolicy; }
 			set { Backend.VerticalScrollPolicy = value; }
@@ -104,7 +110,25 @@ namespace Xwt
 			get { return Backend.HorizontalScrollPolicy; }
 			set { Backend.HorizontalScrollPolicy = value; }
 		}
-		
+
+		ScrollControl verticalScrollAdjustment;
+		public ScrollControl VerticalScrollControl {
+			get {
+				if (verticalScrollAdjustment == null)
+					verticalScrollAdjustment = new ScrollControl (Backend.CreateVerticalScrollControl ());
+				return verticalScrollAdjustment;
+			}
+		}
+
+		ScrollControl horizontalScrollAdjustment;
+		public ScrollControl HorizontalScrollControl {
+			get {
+				if (horizontalScrollAdjustment == null)
+					horizontalScrollAdjustment = new ScrollControl (Backend.CreateHorizontalScrollControl ());
+				return horizontalScrollAdjustment;
+			}
+		}
+
 		public ListViewColumnCollection Columns {
 			get {
 				return columns;
@@ -141,6 +165,20 @@ namespace Xwt
 				Backend.SetSelectionMode (mode);
 			}
 		}
+
+		/// <summary>
+		/// Gets or sets the row the current event applies to.
+		/// The behavior of this property is undefined when used outside an
+		/// event that supports it.
+		/// </summary>
+		/// <value>
+		/// The current event row.
+		/// </value>
+		public int CurrentEventRow {
+			get {
+				return Backend.CurrentEventRow;
+			}
+		}
 		
 		public int SelectedRow {
 			get {
@@ -156,6 +194,19 @@ namespace Xwt
 		public int[] SelectedRows {
 			get {
 				return Backend.SelectedRows;
+			}
+		}
+
+		/// <summary>
+		/// Gets or sets the focused row.
+		/// </summary>
+		/// <value>The row with the keyboard focus.</value>
+		public int FocusedRow {
+			get {
+				return Backend.FocusedRow;
+			}
+			set {
+				Backend.FocusedRow = value;
 			}
 		}
 		
@@ -178,7 +229,66 @@ namespace Xwt
 		{
 			Backend.UnselectAll ();
 		}
-		
+
+		public void ScrollToRow (int row)
+		{
+			Backend.ScrollToRow (row);
+		}
+
+		/// <summary>
+		/// Focuses and starts editing a cell, so the user can start interacting with it
+		/// </summary>
+		/// <param name="row">Row</param>
+		/// <param name="cell">Cell to edit</param>
+		public void StartEditingCell (int row, CellView cell)
+		{
+			Backend.StartEditingCell (row, cell);
+		}
+
+		/// <summary>
+		/// Returns the row at the given widget coordinates
+		/// </summary>
+		/// <returns>The row index</returns>
+		/// <param name="x">The x coordinate.</param>
+		/// <param name="y">The y coordinate.</param>
+		public int GetRowAtPosition (double x, double y)
+		{
+			return GetRowAtPosition (new Point (x, y));
+		}
+
+		/// <summary>
+		/// Returns the row at the given widget coordinates
+		/// </summary>
+		/// <returns>The row index</returns>
+		/// <param name="p">A position, in widget coordinates</param>
+		public int GetRowAtPosition (Point p)
+		{
+			return Backend.GetRowAtPosition (p);
+		}
+
+		/// <summary>
+		/// Gets the bounds of a cell inside the given row.
+		/// </summary>
+		/// <returns>The cell bounds inside the widget, relative to the widget bounds.</returns>
+		/// <param name="row">The row index.</param>
+		/// <param name="cell">The cell view.</param>
+		/// <param name="includeMargin">If set to <c>true</c> include margin (the background of the row).</param>
+		public Rectangle GetCellBounds (int row, CellView cell, bool includeMargin)
+		{
+			return Backend.GetCellBounds (row, cell, includeMargin);
+		}
+
+		/// <summary>
+		/// Gets the bounds of the given row.
+		/// </summary>
+		/// <returns>The row bounds inside the widget, relative to the widget bounds.</returns>
+		/// <param name="row">The row index.</param>
+		/// <param name="includeMargin">If set to <c>true</c> include margin (the background of the row).</param>
+		public Rectangle GetRowBounds (int row, bool includeMargin)
+		{
+			return Backend.GetRowBounds (row, includeMargin);
+		}
+
 		void IColumnContainer.NotifyColumnsChanged ()
 		{
 		}

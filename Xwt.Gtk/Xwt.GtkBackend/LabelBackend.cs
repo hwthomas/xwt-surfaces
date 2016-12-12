@@ -35,10 +35,9 @@ using System.Collections.Generic;
 
 namespace Xwt.GtkBackend
 {
-	class LabelBackend: WidgetBackend, ILabelBackend
+	public partial class LabelBackend: WidgetBackend, ILabelBackend
 	{
-		Color? bgColor, textColor;
-		int wrapHeight, wrapWidth;
+		Color? textColor;
 		List<LabelLink> links;
 		TextIndexer indexer;
 
@@ -48,6 +47,8 @@ namespace Xwt.GtkBackend
 			Label.Show ();
 			Label.Xalign = 0;
 			Label.Yalign = 0.5f;
+			Label.Realized += HandleStyleUpdate;
+			Label.StyleSet += HandleStyleUpdate;
 		}
 		
 		new ILabelEventSink EventSink {
@@ -60,19 +61,6 @@ namespace Xwt.GtkBackend
 					return (Gtk.Label) Widget;
 				else
 					return (Gtk.Label) ((Gtk.EventBox)base.Widget).Child;
-			}
-		}
-		
-		public override Xwt.Drawing.Color BackgroundColor {
-			get {
-				return bgColor.HasValue ? bgColor.Value : base.BackgroundColor;
-			}
-			set {
-				if (!bgColor.HasValue)
-					Label.ExposeEvent += HandleLabelExposeEvent;
-
-				bgColor = value;
-				Label.QueueDraw ();
 			}
 		}
 
@@ -149,8 +137,6 @@ namespace Xwt.GtkBackend
 			if (!Label.Layout.XyToIndex ((int)x, (int)y, out byteIndex, out trailing))
 				return null;
 
-			int index = indexer.ByteIndexToIndex (byteIndex);
-
 			foreach (var li in links)
 				if (byteIndex >= li.StartIndex && byteIndex <= li.EndIndex)
 					return li;
@@ -158,49 +144,6 @@ namespace Xwt.GtkBackend
 			return null;
 		}
 
-		[GLib.ConnectBefore]
-		void HandleLabelExposeEvent (object o, Gtk.ExposeEventArgs args)
-		{
-			using (var ctx = Gdk.CairoHelper.Create (Label.GdkWindow)) {
-				ctx.Rectangle (Label.Allocation.X, Label.Allocation.Y, Label.Allocation.Width, Label.Allocation.Height);
-				ctx.SetSourceColor (bgColor.Value.ToCairoColor ());
-				ctx.Fill ();
-			}
-		}
-
-		void HandleLabelDynamicSizeAllocate (object o, Gtk.SizeAllocatedArgs args)
-		{
-			int unused, oldHeight = wrapHeight;
-			Label.Layout.Width = Pango.Units.FromPixels (args.Allocation.Width);
-			Label.Layout.GetPixelSize (out unused, out wrapHeight);
-			if (wrapWidth != args.Allocation.Width || oldHeight != wrapHeight) {
-				wrapWidth = args.Allocation.Width;
-				Label.QueueResize ();
-			}
-			// GTK renders the text using the calculated pixel width, not the allocated width.
-			// If the calculated width is smaller and text is not left aligned, then a gap is
-			// shown at the right of the label. We then have the adjust the allocation.
-			if (Label.Justify == Gtk.Justification.Right) {
-				var w = wrapWidth - unused;
-				if (w != Label.Xpad)
-					Label.Xpad = w;
-			} else if (Label.Justify == Gtk.Justification.Center) {
-				var w = (wrapWidth - unused) / 2;
-				if (w != Label.Xpad)
-					Label.Xpad = w;
-			}
-		}
-
-		void HandleLabelDynamicSizeRequest (object o, Gtk.SizeRequestedArgs args)
-		{
-			if (wrapHeight > 0) {
-				var req = args.Requisition;
-				req.Width = Label.WidthRequest != -1 ? Label.WidthRequest : 0;
-				req.Height = wrapHeight;
-				args.Requisition = req;
-			}
-		}
-		
 		public virtual string Text {
 			get { return Label.Text; }
 			set {
@@ -210,10 +153,25 @@ namespace Xwt.GtkBackend
 			}
 		}
 
+		public bool Selectable {
+			get { return Label.Selectable; }
+			set { Label.Selectable = value; }
+		}
+
+		FormattedText formattedText;
 		public void SetFormattedText (FormattedText text)
 		{
 			Label.Text = text.Text;
+			formattedText = text;
 			var list = new FastPangoAttrList ();
+			if (Label.IsRealized) {
+				var color = Gdk.Color.Zero;
+				var colorVal = Label.StyleGetProperty ("link-color");
+				if (colorVal is Gdk.Color)
+					color = (Gdk.Color)colorVal;
+				if (!color.Equals (Gdk.Color.Zero))
+					list.DefaultLinkColor = color;
+			}
 			indexer = new TextIndexer (text.Text);
 			list.AddAttributes (indexer, text.Attributes);
 			gtk_label_set_attributes (Label.Handle, list.Handle);
@@ -237,6 +195,14 @@ namespace Xwt.GtkBackend
 			if (links == null || links.Count == 0) {
 				links = null;
 				indexer = null;
+			}
+		}
+
+		void HandleStyleUpdate (object sender, EventArgs e)
+		{
+			// force text update with updated link color
+			if (Label.IsRealized && formattedText != null) {
+				SetFormattedText (formattedText);
 			}
 		}
 
@@ -273,22 +239,20 @@ namespace Xwt.GtkBackend
 			}
 		}
 
-		void SetAlignment ()
+		protected void SetAlignment ()
 		{
 			switch (alignment) {
-			case Alignment.Start:
-				Label.Justify = Gtk.Justification.Left;
-				Label.Xalign = 0f;
-				break;
-			case Alignment.End:
-				Label.Justify = Gtk.Justification.Right;
-				Label.Xalign = Label.LineWrap ? 0 : 1;
-				break;
-			case Alignment.Center:
-				Label.Justify = Gtk.Justification.Center;
-				Label.Xalign = Label.LineWrap ? 0 : 0.5f;
-				break;
+				case Alignment.Start:
+					Label.Justify = Gtk.Justification.Left;
+					break;
+				case Alignment.End:
+					Label.Justify = Gtk.Justification.Right;
+					break;
+				case Alignment.Center:
+					Label.Justify = Gtk.Justification.Center;
+					break;
 			}
+			SetAlignmentGtk ();
 		}
 		
 		public EllipsizeMode Ellipsize {
@@ -318,17 +282,14 @@ namespace Xwt.GtkBackend
 				}
 			}
 			set {
+				ToggleSizeCheckEventsForWrap (value);
 				if (value == WrapMode.None){
 					if (Label.LineWrap) {
 						Label.LineWrap = false;
-						Label.SizeAllocated -= HandleLabelDynamicSizeAllocate;
-						Label.SizeRequested -= HandleLabelDynamicSizeRequest;
 					}
 				} else {
 					if (!Label.LineWrap) {
 						Label.LineWrap = true;
-						Label.SizeAllocated += HandleLabelDynamicSizeAllocate;
-						Label.SizeRequested += HandleLabelDynamicSizeRequest;
 					}
 					switch (value) {
 					case WrapMode.Character:

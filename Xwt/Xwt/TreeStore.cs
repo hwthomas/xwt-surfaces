@@ -92,6 +92,59 @@ namespace Xwt
 			var pos = Backend.AddChild (position);
 			return new TreeNavigator (Backend, pos);
 		}
+
+		public TreeNavigator InsertNodeAfter (TreePosition positon)
+		{
+			var pos = Backend.InsertAfter (positon);
+			return new TreeNavigator (Backend, pos);
+		}
+
+		public TreeNavigator InsertNodeBefore (TreePosition positon)
+		{
+			var pos = Backend.InsertBefore (positon);
+			return new TreeNavigator (Backend, pos);
+		}
+
+		public IEnumerable<TreeNavigator> FindNavigators<T> (T fieldValue, IDataField<T> field)
+		{
+			if (fieldValue == null) {
+				return Enumerable.Empty<TreeNavigator> ();
+			}
+			TreeNavigator navigator = GetFirstNode ();
+			if (navigator.CurrentPosition == null) {
+				return Enumerable.Empty<TreeNavigator> ();
+			}
+			return FindNavigators (fieldValue, field, navigator);
+		}
+
+		static IEnumerable<TreeNavigator> FindNavigators<T> (T fieldValue, IDataField<T> field, TreeNavigator navigator)
+		{
+			do {
+				if (IsNavigator (navigator, fieldValue, field)) {
+					yield return navigator.Clone ();
+				}
+				foreach (TreeNavigator foundChild in FindChildNavigators (navigator, fieldValue, field)) {
+					yield return foundChild.Clone ();
+				}
+			} while (navigator.MoveNext());
+		}
+
+		static IEnumerable<TreeNavigator> FindChildNavigators<T> (TreeNavigator navigator, T fieldValue, IDataField<T> field)
+		{
+			if (!navigator.MoveToChild ()) {
+				yield break;
+			}
+			foreach (var treeNavigator in FindNavigators (fieldValue, field, navigator)) {
+				yield return treeNavigator;
+			}
+			navigator.MoveToParent ();
+		}
+
+		static bool IsNavigator<T> (TreeNavigator navigator, T fieldValue, IDataField<T> field)
+		{
+			T value = navigator.GetValue (field);
+			return fieldValue.Equals (value);
+		}
 		
 		public void Clear ()
 		{
@@ -257,6 +310,8 @@ namespace Xwt
 			} else {
 				NodePosition np = GetPosition (pos);
 				Node n = np.ParentList[np.NodeIndex];
+				if (n.Children == null || index >= n.Children.Count)
+					return null;
 				return new NodePosition () { ParentList = n.Children, NodeId = n.Children[index].NodeId, NodeIndex = index, StoreVersion = version };
 			}
 		}
@@ -264,7 +319,7 @@ namespace Xwt
 		public TreePosition GetNext (TreePosition pos)
 		{
 			NodePosition np = GetPosition (pos);
-			if (np.NodeIndex >= np.ParentList.Count)
+			if (np.NodeIndex >= np.ParentList.Count - 1)
 				return null;
 			Node n = np.ParentList[np.NodeIndex + 1];
 			return new NodePosition () { ParentList = np.ParentList, NodeId = n.NodeId, NodeIndex = np.NodeIndex + 1, StoreVersion = version };

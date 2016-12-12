@@ -62,10 +62,8 @@ namespace Xwt.Drawing
 
 		internal TextLayout (Toolkit tk)
 		{
-			ToolkitEngine = tk;
-			handler = ToolkitEngine.TextLayoutBackendHandler;
-			Backend = handler.Create ();
-			Setup ();
+			ToolkitEngine = null;
+			InitForToolkit (tk);
 		}
 
 		void Setup ()
@@ -90,6 +88,33 @@ namespace Xwt.Drawing
 			ResourceManager.FreeResource (Backend);
 		}
 
+		internal void InitForToolkit (Toolkit tk)
+		{
+			if (ToolkitEngine == null || ToolkitEngine != tk) {
+				// If this is a re-initialization we dispose the previous state
+				if (handler != null) {
+					Dispose ();
+					GC.ReRegisterForFinalize (this);
+				}
+				ToolkitEngine = tk;
+				handler = ToolkitEngine.TextLayoutBackendHandler;
+				Backend = handler.Create ();
+				Setup ();
+				font = (Font)tk.ValidateObject (font);
+				if (font != null)
+					handler.SetFont (Backend, font);
+				if (text != null)
+					handler.SetText (Backend, text);
+				if (width != -1)
+					handler.SetWidth (Backend, width);
+				if (height != -1)
+					handler.SetHeight (Backend, height);
+				if (attributes != null && attributes.Count > 0)
+					foreach (var attr in attributes)
+						handler.AddAttribute (Backend, attr);
+			}
+		}
+
 		internal TextLayoutData GetData ()
 		{
 			return new TextLayoutData () {
@@ -104,7 +129,7 @@ namespace Xwt.Drawing
 
 		public Font Font {
 			get { return font; }
-			set { font = value; handler.SetFont (Backend, value); }
+			set { font = value; handler.SetFont (Backend, (Font)ToolkitEngine.ValidateObject (value)); }
 		}
 
 		public string Text {
@@ -146,6 +171,24 @@ namespace Xwt.Drawing
 		public Size GetSize ()
 		{
 			return handler.GetSize (Backend);
+		}
+
+		/// <summary>
+		/// Get the distance in pixels between the top of the layout bounds and the first line's baseline
+		/// </summary>
+		public double Baseline {
+			get {
+				return handler.GetBaseline (Backend);
+			}
+		}
+
+		/// <summary>
+		/// Get the distance in pixels between the top of the layout bounds and the first line's meanline (usually equivalent to the baseline minus half of the x-height)
+		/// </summary>
+		public double Meanline {
+			get {
+				return handler.GetMeanline (Backend);
+			}
 		}
 
 		public TextTrimming Trimming {

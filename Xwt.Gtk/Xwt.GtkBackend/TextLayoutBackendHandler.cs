@@ -71,13 +71,13 @@ namespace Xwt.GtkBackend
 				}
 			}
 
-			string text;
+			string text = String.Empty;
 			public string Text {
 				get {
 					return text;
 				}
 				set {
-					text = value;
+					text = value ?? String.Empty;;
 					indexer = null;
 					if (attributes != null) {
 						attributes.Dispose ();
@@ -139,6 +139,7 @@ namespace Xwt.GtkBackend
 		public override void SetText (object backend, string text)
 		{
 			var tl = (PangoBackend) backend;
+			text = text ?? String.Empty;
 			tl.Layout.SetText (text);
 			tl.Text = text;
 		}
@@ -146,7 +147,7 @@ namespace Xwt.GtkBackend
 		public override void SetFont (object backend, Xwt.Drawing.Font font)
 		{
 			var tl = (PangoBackend)backend;
-			tl.Layout.FontDescription = (Pango.FontDescription)Toolkit.GetBackend (font);
+			tl.Layout.FontDescription = (Pango.FontDescription)ApplicationContext.Toolkit.GetSafeBackend (font);
 		}
 		
 		public override void SetWidth (object backend, double value)
@@ -203,6 +204,24 @@ namespace Xwt.GtkBackend
 			var tl = (PangoBackend) backend;
 			var pos = tl.Layout.IndexToPos (tl.TextIndexer.IndexToByteIndex (index));
 			return new Point (pos.X / Pango.Scale.PangoScale, pos.Y / Pango.Scale.PangoScale);
+		}
+
+		public override double GetBaseline (object backend)
+		{
+			var tl = (PangoBackend) backend;
+			// Just get the first line
+			using (var iter = tl.Layout.Iter)
+				return Pango.Units.ToPixels (iter.Baseline);
+		}
+
+		public override double GetMeanline (object backend)
+		{
+			var tl = (PangoBackend)backend;
+			var baseline = 0;
+			using (var iter = tl.Layout.Iter)
+				baseline = iter.Baseline;
+			var font = tl.Layout.Context.LoadFont (tl.Layout.FontDescription);
+			return Pango.Units.ToPixels (baseline - font.GetMetrics (Pango.Language.Default).StrikethroughPosition);
 		}
 
 		public override void Dispose (object backend)

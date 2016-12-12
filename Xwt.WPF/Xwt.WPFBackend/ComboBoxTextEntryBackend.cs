@@ -45,6 +45,21 @@ namespace Xwt.WPFBackend
 			this.combobox = combobox;
 			this.combobox.GotFocus += OnGotFocus;
 			this.combobox.LostFocus += OnLostFocus;
+			this.combobox.Loaded += HandleLoaded;
+		}
+
+		protected override void Initialize()
+		{
+			base.Initialize();
+
+			if (TextBox == null && combobox.ApplyTemplate())
+				HandleLoaded(this, null);
+		}
+
+		void HandleLoaded(object sender, RoutedEventArgs e)
+		{
+			if (Widget != TextBox)
+				Widget = TextBox;
 		}
 
 		public string Text
@@ -95,7 +110,92 @@ namespace Xwt.WPFBackend
 			}
 		}
 
+		protected TextBox TextBox {
+			get { return combobox.TextBox; }
+		}
+
+		public int CursorPosition {
+			get {
+				if (ReadOnly)
+					return 0;
+				else 
+					return TextBox.SelectionStart;
+			}
+			set {
+				if (!ReadOnly) {
+					TextBox.Focus();
+					TextBox.SelectionStart = value;
+				}
+			}
+		}
+
+		public int SelectionStart {
+			get {
+				if (ReadOnly)
+					return 0;
+				else 
+					return TextBox.SelectionStart;
+			}
+			set {
+				if (!ReadOnly) {
+					int cacheLength = SelectionLength;
+					TextBox.Focus ();
+					TextBox.SelectionStart = value;
+					TextBox.SelectionLength = cacheLength;
+				}
+			}
+		}
+
+		public int SelectionLength {
+			get {
+				if (ReadOnly)
+					return this.SelectedText.Length;
+				else
+					return TextBox.SelectionLength;
+			}
+			set {
+				if (!ReadOnly) {
+					int cacheStart = SelectionStart;
+					TextBox.Focus ();
+					TextBox.SelectionLength = value;
+					TextBox.SelectionStart = cacheStart;
+				}
+			}
+		}
+
+		public string SelectedText {
+			get {
+				if (ReadOnly)
+					return this.SelectedText;
+				else
+					return TextBox.SelectedText;
+			}
+			set {
+				if (!ReadOnly) {
+					int cacheStart = SelectionStart;
+					int cacheLength = SelectionLength;
+					TextBox.Focus ();
+					TextBox.SelectionStart = cacheStart;
+					TextBox.SelectionLength = cacheLength;
+					TextBox.SelectedText = value;
+				}
+			}
+		}
+
 		public bool MultiLine { get; set; }
+
+		public bool HasCompletions {
+			get { return false; }
+		}
+
+		public void SetCompletions(string[] completions)
+		{
+			// TODO
+		}
+
+		public void SetCompletionMatchFunc (Func<string, string, bool> matchFunc)
+		{
+		}
 
 		public override void EnableEvent (object eventId)
 		{
@@ -104,6 +204,9 @@ namespace Xwt.WPFBackend
 				switch ((TextEntryEvent)eventId) {
 				case TextEntryEvent.Changed:
 					this.combobox.TextChanged += OnTextChanged;
+					break;
+				case TextEntryEvent.SelectionChanged:
+					combobox.TextSelectionChanged += OnSelectionChanged;
 					break;
 				}
 			}
@@ -116,6 +219,9 @@ namespace Xwt.WPFBackend
 				switch ((TextEntryEvent)eventId) {
 				case TextEntryEvent.Changed:
 					this.combobox.TextChanged -= OnTextChanged;
+					break;
+				case TextEntryEvent.SelectionChanged:
+					combobox.TextSelectionChanged -= OnSelectionChanged;
 					break;
 				}
 			}
@@ -131,6 +237,11 @@ namespace Xwt.WPFBackend
 		private void OnTextChanged (object sender, EventArgs e)
 		{
 			Context.InvokeUserCode (TextEntryEventSink.OnChanged);
+		}
+
+		private void OnSelectionChanged (object s, EventArgs e)
+		{
+			Context.InvokeUserCode (TextEntryEventSink.OnSelectionChanged);
 		}
 
 		private void UpdatePlaceholder (string newPlaceholder, bool focused)

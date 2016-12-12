@@ -34,6 +34,7 @@ using System.Windows.Media;
 using System.Text.RegularExpressions;
 using SWC = System.Windows.Controls;
 using Xwt.Backends;
+using System.Windows.Data;
 
 
 namespace Xwt.WPFBackend
@@ -120,11 +121,18 @@ namespace Xwt.WPFBackend
 						labelCtrl.Content = accessText;
 					else
 						labelCtrl.Content = label;
+					labelCtrl.SetBinding (SWC.Label.ForegroundProperty, new Binding ("Foreground") { Source = Button });
 					grid.Children.Add (labelCtrl);
 				}
 				Button.Content = grid;
 			}
 			Button.InvalidateMeasure ();
+		}
+
+		public Xwt.Drawing.Color LabelColor
+		{
+			get { return Button.Foreground.ToXwtColor(); }
+			set { Button.Foreground = ResPool.GetSolidBrush (value.ToWpfColor()); }
 		}
 
 		public override void EnableEvent (object eventId)

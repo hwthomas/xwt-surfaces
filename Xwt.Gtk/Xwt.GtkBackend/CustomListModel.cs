@@ -26,10 +26,14 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using Gtk;
+#if XWT_GTK3
+using TreeModelImplementor = Gtk.ITreeModelImplementor;
+#endif
 
 namespace Xwt.GtkBackend
 {
-	public class CustomListModel: GLib.Object, Gtk.TreeModelImplementor
+	public class CustomListModel: GLib.Object, TreeModelImplementor
 	{
 		IListDataSource source;
 		Dictionary<int,int> nodeHash = new Dictionary<int,int> ();
@@ -53,6 +57,19 @@ namespace Xwt.GtkBackend
 			source.RowDeleted += HandleRowDeleted;
 			source.RowInserted += HandleRowInserted;
 			source.RowsReordered += HandleRowsReordered;
+		}
+
+		#if XWT_GTK3
+		protected override void Dispose(bool disposing)
+		#else
+		public override void Dispose ()
+		#endif
+		{
+			source.RowChanged -= HandleRowChanged;
+			source.RowDeleted -= HandleRowDeleted;
+			source.RowInserted -= HandleRowInserted;
+			source.RowsReordered -= HandleRowsReordered;
+			base.Dispose();
 		}
 
 		void HandleRowsReordered (object sender, ListRowOrderEventArgs e)
@@ -152,6 +169,18 @@ namespace Xwt.GtkBackend
 			} else
 				return false;
 		}
+
+		#if XWT_GTK3
+		public bool IterPrevious (ref Gtk.TreeIter iter)
+		{
+			int row = NodeFromIter (iter);
+			if (--row >= 0) {
+				iter = IterFromNode (row);
+				return true;
+			} else
+				return false;
+		}
+		#endif
 
 		public bool IterChildren (out Gtk.TreeIter iter, Gtk.TreeIter parent)
         {

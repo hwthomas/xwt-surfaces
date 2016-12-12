@@ -70,7 +70,7 @@ namespace Xwt
 		Point location;
 		Size size;
 		bool pendingReallocation;
-        Image icon;
+		Image icon;
 		WindowFrame transientFor;
 		
 		protected class WindowBackendHost: BackendHost<WindowFrame,IWindowFrameBackend>, IWindowFrameEventSink
@@ -151,6 +151,19 @@ namespace Xwt
 		protected new WindowBackendHost BackendHost {
 			get { return (WindowBackendHost) base.BackendHost; }
 		}
+
+		/// <summary>
+		/// Gets or sets the name (not title) of this window.
+		/// </summary>
+		/// <value>The window name.</value>
+		/// <remarks>The name can be used to identify this window by e.g. designers.
+		/// The name of the window is not visible to the user. Use the Title property
+		/// to modify the visible window title.</remarks>
+		[DefaultValue (null)]
+		public override string Name {
+			get { return Backend.Name; }
+			set { Backend.Name = value; }
+		}
 		
 		public Rectangle ScreenBounds {
 			get {
@@ -226,10 +239,10 @@ namespace Xwt
 			set { Backend.Title = value; }
 		}
 
-        public Image Icon {
-            get { return icon; }
-			set { icon = value; Backend.SetIcon (icon != null ? icon.ImageDescription : ImageDescription.Null); }
-        }
+		public Image Icon {
+			get { return icon; }
+			set { icon = value; Backend.SetIcon (icon != null ? icon.GetImageDescription (BackendHost.ToolkitEngine) : ImageDescription.Null); }
+		}
 		
 		public bool Decorated {
 			get { return Backend.Decorated; }
@@ -257,6 +270,12 @@ namespace Xwt
 		public bool Visible {
 			get { return Backend.Visible; }
 			set { Backend.Visible = value; }
+		}
+
+		[DefaultValue (true)]
+		public bool Sensitive {
+			get { return Backend.Sensitive; }
+			set { Backend.Sensitive = value; }
 		}
 
 		public double Opacity {
@@ -340,7 +359,7 @@ namespace Xwt
 		/// <summary>
 		/// Called to check if the window can be closed
 		/// </summary>
-		/// <returns><c>true<c> if the window can be closed, <c>false</c> otherwise</returns>
+		/// <returns><c>true</c> if the window can be closed, <c>false</c> otherwise</returns>
 		protected virtual bool OnCloseRequested ()
 		{
 			if (closeRequested == null)

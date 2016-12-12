@@ -42,9 +42,19 @@ namespace Xwt.GtkBackend
 			}
 
 			// Check if it is an NSView
-			Type nsView = Type.GetType ("MonoMac.AppKit.NSView, MonoMac", false);
+			Type nsView = Type.GetType ("AppKit.NSView, Xamarin.Mac", false);
 			if (nsView != null && nsView.IsInstanceOfType (nativeWidget)) {
 				Widget = GtkMacInterop.NSViewToGtkWidget (nativeWidget);
+				Widget.Show ();
+				return;
+			}
+
+			Type frameworkElement = Type.GetType ("System.Windows.FrameworkElement, PresentationFramework, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35", false);
+			Type windowsHelper = Type.GetType ("Xwt.Gtk.Windows.GtkWin32Interop, Xwt.Gtk.Windows", false);
+			if (frameworkElement != null && windowsHelper != null && frameworkElement.IsInstanceOfType (nativeWidget)) {
+				var factoryMethod = windowsHelper.GetMethod ("ControlToGtkWidget",
+				                                             System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public);
+				Widget = (Gtk.Widget)factoryMethod.Invoke (null, new [] { nativeWidget });
 				Widget.Show ();
 				return;
 			}

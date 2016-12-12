@@ -44,6 +44,14 @@ namespace Xwt.WPFBackend
 	public class TreeViewBackend
 		: WidgetBackend, ITreeViewBackend
 	{
+		Dictionary<CellView,CellInfo> cellViews = new Dictionary<CellView, CellInfo> ();
+
+		class CellInfo {
+			public ListViewColumn Column;
+			public int CellIndex;
+			public int ColumnIndex;
+		}
+
 		private static readonly ResourceDictionary TreeResourceDictionary;
 		static TreeViewBackend()
 		{
@@ -59,6 +67,16 @@ namespace Xwt.WPFBackend
 			Tree.SetValue (VirtualizingStackPanel.IsVirtualizingProperty, true);
 		}
 
+		public ScrollViewer ScrollViewer {
+			get {
+				Decorator border = System.Windows.Media.VisualTreeHelper.GetChild(Tree, 0) as Decorator;
+				if (border != null)
+					return border.Child as ScrollViewer;
+				else
+					return null;
+			}
+		}
+
 		public TreePosition CurrentEventRow { get; set;  }
 		
 		public ScrollPolicy VerticalScrollPolicy {
@@ -71,8 +89,31 @@ namespace Xwt.WPFBackend
 			set { ScrollViewer.SetHorizontalScrollBarVisibility (Tree, value.ToWpfScrollBarVisibility ()); }
 		}
 
+		public IScrollControlBackend CreateVerticalScrollControl()
+		{
+			return new ScrollControlBackend(ScrollViewer, true);
+		}
+
+		public IScrollControlBackend CreateHorizontalScrollControl()
+		{
+			return new ScrollControlBackend(ScrollViewer, false);
+		}
+
 		public TreePosition[] SelectedRows {
 			get { return Tree.SelectedItems.Cast<TreePosition> ().ToArray (); }
+		}
+
+
+		public TreePosition FocusedRow {
+			get {
+				if (Tree.FocusedItem != null)
+					return Tree.FocusedItem.DataContext as TreePosition;
+				return null;
+			}
+			set {
+				ExTreeViewItem item = GetVisibleTreeItem (value);
+				Tree.FocusedItem = item;
+			}
 		}
 
 		private bool headersVisible = true;
@@ -90,6 +131,16 @@ namespace Xwt.WPFBackend
 
 				    Tree.View.ColumnHeaderContainerStyle.Setters.Add (HideHeaderSetter);
 				}
+			}
+		}
+
+		GridLines gridLinesVisible;
+		public GridLines GridLinesVisible {
+			get {
+				return gridLinesVisible;
+			}
+			set {
+				gridLinesVisible = value;
 			}
 		}
 
@@ -138,7 +189,9 @@ namespace Xwt.WPFBackend
 
 		public void ScrollToRow (TreePosition pos)
 		{
-			GetVisibleTreeItem (pos).BringIntoView();
+			ExTreeViewItem item = GetVisibleTreeItem (pos);
+			if (item != null)
+				item.BringIntoView ();
 		}
 
 		public void SetSelectionMode (SelectionMode mode)
@@ -185,7 +238,7 @@ namespace Xwt.WPFBackend
 				break;
 
 			case ListViewColumnChange.Cells:
-				var cellTemplate = CellUtil.CreateBoundColumnTemplate (column.Views);
+                var cellTemplate = CellUtil.CreateBoundColumnTemplate(Context, Frontend, column.Views);
 
 				col.CellTemplate = new DataTemplate { VisualTree = cellTemplate };
 
@@ -197,6 +250,13 @@ namespace Xwt.WPFBackend
 					col.CellTemplate.VisualTree = dockFactory;
 				}
 
+				MapColumn (column, col);
+
+				break;
+			case ListViewColumnChange.Alignment:
+				var style = new Style(typeof(GridViewColumnHeader));
+				style.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty, Util.ToWpfHorizontalAlignment(column.Alignment)));
+				col.HeaderContainerStyle = style;
 				break;
 			}
 		}
@@ -204,6 +264,25 @@ namespace Xwt.WPFBackend
 		public void RemoveColumn (ListViewColumn column, object handle)
 		{
 			Tree.View.Columns.Remove ((GridViewColumn) handle);
+			foreach (var k in cellViews.Where (e => e.Value.Column == column).Select (e => e.Key).ToArray ())
+				cellViews.Remove (k);
+		}
+
+		void MapColumn (ListViewColumn col, GridViewColumn handle)
+		{
+			foreach (var k in cellViews.Where (e => e.Value.Column == col).Select (e => e.Key).ToArray ())
+				cellViews.Remove (k);
+
+			var colindex = Tree.View.Columns.IndexOf (handle);
+			for (int i = 0; i < col.Views.Count; i++) {
+				var v = col.Views [i];
+				var cellindex = col.Views.IndexOf (v);
+				cellViews [v] = new CellInfo {
+					Column = col,
+					CellIndex = cellindex,
+					ColumnIndex = colindex
+				};
+			}
 		}
 
 		private RowDropPosition dropPosition;
@@ -243,6 +322,8 @@ namespace Xwt.WPFBackend
 			return true;
 		}
 
+		internal bool RowActivatedEventEnabled { get; private set; }
+
 		public override void EnableEvent (object eventId)
 		{
 			base.EnableEvent (eventId);
@@ -251,6 +332,16 @@ namespace Xwt.WPFBackend
 				case TableViewEvent.SelectionChanged:
 					Tree.SelectedItemsChanged += OnSelectedItemsChanged;
 					break;
+				}
+			}
+
+			if (eventId is TreeViewEvent)
+			{
+				switch ((TreeViewEvent)eventId)
+				{
+					case TreeViewEvent.RowActivated:
+						RowActivatedEventEnabled = true;
+						break;
 				}
 			}
 		}
@@ -263,6 +354,16 @@ namespace Xwt.WPFBackend
 				case TableViewEvent.SelectionChanged:
 					Tree.SelectedItemsChanged -= OnSelectedItemsChanged;
 					break;
+				}
+			}
+
+			if (eventId is TreeViewEvent)
+			{
+				switch ((TreeViewEvent)eventId)
+				{
+					case TreeViewEvent.RowActivated:
+						RowActivatedEventEnabled = false;
+						break;
 				}
 			}
 		}
@@ -338,6 +439,9 @@ namespace Xwt.WPFBackend
 			while (nodes.Count > 0) {
 				node = nodes.Pop ();
 				treeItem = (ExTreeViewItem) g.ContainerFromItem (node);
+				if (treeItem == null)
+					continue;
+
 				treeItem.UpdateLayout ();
 				g = treeItem.ItemContainerGenerator;
 
@@ -425,5 +529,120 @@ namespace Xwt.WPFBackend
 			new BooleanToValueConverter { TrueValue = Minus, FalseValue = Plus };
 
 		private static readonly Setter HideHeaderSetter = new Setter (UIElement.VisibilityProperty, Visibility.Collapsed);
+
+		public TreePosition GetRowAtPosition (Point p)
+		{
+			var result = VisualTreeHelper.HitTest (Tree, new System.Windows.Point (p.X, p.Y)) as PointHitTestResult;
+
+			var element = (result != null) ? result.VisualHit as FrameworkElement : null;
+			while (element != null) {
+				if (element is ExTreeViewItem)
+					break;
+				if (element is ExTreeView) // We can't succeed past this point
+					return null;
+
+				element = VisualTreeHelper.GetParent (element) as FrameworkElement;
+			}
+
+			if (element == null)
+				return null;
+
+			return (element.DataContext as TreeStoreNode);
+		}
+
+		public Rectangle GetCellBounds (TreePosition pos, CellView cell, bool includeMargin)
+		{
+			ExTreeViewItem item = GetVisibleTreeItem (pos);
+			if (item == null)
+				return Rectangle.Zero;
+
+			// this works only if the wpf layout remains the same
+			try {
+				var stackpanel = VisualTreeHelper.GetChild (item, 0);
+				var border = VisualTreeHelper.GetChild (stackpanel, 0);
+				var rowpresenter = VisualTreeHelper.GetChild (border, 0) as FrameworkElement;
+
+				if (VisualTreeHelper.GetChildrenCount (rowpresenter) < cellViews [cell].ColumnIndex)
+					return Rectangle.Zero;
+
+				var colpresenter =  VisualTreeHelper.GetChild (rowpresenter, cellViews [cell].ColumnIndex) as FrameworkElement;
+				var colchild =  VisualTreeHelper.GetChild (colpresenter, 0) as FrameworkElement;
+
+				if (cellViews [cell].Column.Views.Count > 1 && colchild is System.Windows.Controls.StackPanel) {
+					var childStack = colchild as System.Windows.Controls.StackPanel;
+					if (childStack == null || VisualTreeHelper.GetChildrenCount (childStack) < cellViews [cell].CellIndex)
+						return Rectangle.Zero;
+					var cellpresenter = VisualTreeHelper.GetChild (childStack, cellViews [cell].ColumnIndex == 0 ? cellViews [cell].CellIndex + 1 : cellViews [cell].CellIndex) as FrameworkElement;
+					var position = cellpresenter.TransformToAncestor (Tree).Transform(new System.Windows.Point(-Tree.Padding.Left, 0));
+					var rect = new Rect (position, cellpresenter.RenderSize);
+					return rect.ToXwtRect ();
+				} else {
+					if (cellViews [cell].ColumnIndex == 0)
+						colchild = VisualTreeHelper.GetChild (colchild, 1) as FrameworkElement;
+					var position = colchild.TransformToAncestor (Tree).Transform(new System.Windows.Point(-Tree.Padding.Left, 0));
+					var rect = new Rect (position, colchild.RenderSize);
+					return rect.ToXwtRect ();
+				}
+			} catch (ArgumentOutOfRangeException) {
+				return Rectangle.Zero;
+			} catch (ArgumentNullException) {
+				return Rectangle.Zero;
+			}
+		}
+
+		public Rectangle GetRowBounds (TreePosition pos, bool includeMargin)
+		{
+			ExTreeViewItem item = GetVisibleTreeItem (pos);
+			if (item == null)
+				return Rectangle.Zero;
+
+			// this works only if the wpf layout remains the same
+			try {
+				var stackpanel = VisualTreeHelper.GetChild (item, 0);
+				var border = VisualTreeHelper.GetChild (stackpanel, 0) as FrameworkElement;
+
+				var rect = Rectangle.Zero;
+				if (includeMargin) {
+					var position = border.TransformToAncestor (Tree).Transform (new System.Windows.Point (0, 0));
+					rect = new Rect (position, border.RenderSize).ToXwtRect();
+					rect.X -= Tree.Padding.Left;
+				} else {
+					var rowpresenter = VisualTreeHelper.GetChild (border, 0) as FrameworkElement;
+					for (int i = 0; i < VisualTreeHelper.GetChildrenCount (rowpresenter); i++)
+					{
+						var colpresenter =  VisualTreeHelper.GetChild (rowpresenter, i) as FrameworkElement;
+						var colchild =  VisualTreeHelper.GetChild (colpresenter, 0) as FrameworkElement;
+						var cellcount = VisualTreeHelper.GetChildrenCount (colchild);
+						if (cellcount > 1)
+							for (int j = 0; j < cellcount; j++) {
+								var cell =  VisualTreeHelper.GetChild (colchild, j) as FrameworkElement;
+								var position = cell.TransformToAncestor (Tree).Transform(new System.Windows.Point(-Tree.Padding.Left, 0));
+								var cell_rect = new Rect (position, cell.RenderSize).ToXwtRect();
+								if (rect == Rectangle.Zero)
+									rect = cell_rect;
+								else
+									rect = rect.Union(cell_rect);
+							}
+						else {
+							var position = colchild.TransformToAncestor (Tree).Transform(new System.Windows.Point(-Tree.Padding.Left, 0));
+							var cell_rect = new Rect (position, colchild.RenderSize).ToXwtRect();
+							if (rect == Rectangle.Zero)
+								rect = cell_rect;
+							else
+								rect = rect.Union(cell_rect);
+						}
+					}
+					//var position = rowpresenter.TransformToAncestor (Tree).Transform(new System.Windows.Point(0,0));
+					//rect = new Rect (position, rowpresenter.RenderSize).ToXwtRect();
+					//rect.X -= Tree.Padding.Left + Tree.BorderThickness.Left;
+				}
+
+				return rect;
+			} catch (ArgumentOutOfRangeException) {
+				return Rectangle.Zero;
+			} catch (ArgumentNullException) {
+				return Rectangle.Zero;
+			}
+		}
 	}
 }

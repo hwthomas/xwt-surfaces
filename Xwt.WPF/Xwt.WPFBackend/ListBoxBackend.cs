@@ -28,8 +28,10 @@ using System;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using Xwt.Backends;
 using Xwt.WPFBackend.Utilities;
+using System.Windows.Input;
 
 namespace Xwt.WPFBackend
 {
@@ -41,6 +43,41 @@ namespace Xwt.WPFBackend
 			ListBox = new ExListBox();
 			ListBox.DisplayMemberPath = ".[0]";
 		}
+
+		public ScrollViewer ScrollViewer {
+			get {
+				Decorator border = System.Windows.Media.VisualTreeHelper.GetChild(ListBox, 0) as Decorator;
+				if (border != null)
+					return border.Child as ScrollViewer;
+				else
+					return null;
+			}
+		}
+
+		bool gridLinesVisible;
+		public bool GridLinesVisible {
+			get {
+				return gridLinesVisible;
+			}
+			set {
+				gridLinesVisible = value;
+				if (!value) {
+					if (this.ListBox.ItemContainerStyle != null) {
+						this.ListBox.ItemContainerStyle.Setters.Remove (GridHorizontalSetter);
+						this.ListBox.ItemContainerStyle.Setters.Remove (BorderBrushSetter);
+					}
+				} else {
+					if (this.ListBox.ItemContainerStyle == null)
+						this.ListBox.ItemContainerStyle = new Style ();
+
+					this.ListBox.ItemContainerStyle.Setters.Add (GridHorizontalSetter);
+					this.ListBox.ItemContainerStyle.Setters.Add (BorderBrushSetter);
+				}
+			}
+		}
+
+		private static readonly Setter GridHorizontalSetter = new Setter (ListBoxItem.BorderThicknessProperty, new Thickness (0, 0, 0, 1));
+		private static readonly Setter BorderBrushSetter = new Setter (ListBoxItem.BorderBrushProperty, System.Windows.Media.Brushes.LightGray);
 
 		public ScrollPolicy VerticalScrollPolicy
 		{
@@ -54,10 +91,20 @@ namespace Xwt.WPFBackend
 			set { ScrollViewer.SetVerticalScrollBarVisibility (ListBox, value.ToWpfScrollBarVisibility ()); }
 		}
 
+		public IScrollControlBackend CreateVerticalScrollControl()
+		{
+			return new ScrollControlBackend(ScrollViewer, true);
+		}
+
+		public IScrollControlBackend CreateHorizontalScrollControl()
+		{
+			return new ScrollControlBackend(ScrollViewer, false);
+		}
+
 		public void SetViews (CellViewCollection views)
 		{
 			ListBox.DisplayMemberPath = null;
-			ListBox.ItemTemplate = new DataTemplate { VisualTree = CellUtil.CreateBoundColumnTemplate (views) };
+            ListBox.ItemTemplate = new DataTemplate { VisualTree = CellUtil.CreateBoundColumnTemplate(Context, Frontend, views) };
 		}
 
 		public void SetSource (IListDataSource source, IBackend sourceBackend)
@@ -91,8 +138,28 @@ namespace Xwt.WPFBackend
 			ListBox.UnselectAll();
 		}
 
+		public void ScrollToRow (int row)
+		{
+			ListBox.ScrollIntoView (ListBox.Items [row]);
+		}
+
 		public int[] SelectedRows {
 			get { return ListBox.SelectedItems.Cast<object>().Select (ListBox.Items.IndexOf).ToArray(); }
+		}
+
+		public int FocusedRow {
+			get {
+				if (ListBox.FocusedItem != null)
+					return ListBox.ItemContainerGenerator.IndexFromContainer(ListBox.FocusedItem);
+				return -1;
+			}
+			set {
+				ListBoxItem item = null;
+				if (value >= 0) {
+					item = ListBox.ItemContainerGenerator.ContainerFromIndex(value) as ListBoxItem;
+				}
+				ListBox.FocusItem(item);
+			}
 		}
 
 		public void SelectRow (int pos)
@@ -123,6 +190,14 @@ namespace Xwt.WPFBackend
 					break;
 				}
 			}
+
+			if (eventId is ListViewEvent) {
+				switch ((ListViewEvent)eventId) {
+				case ListViewEvent.RowActivated:
+					ListBox.MouseDoubleClick += OnMouseDoubleClick;
+					break;
+				}
+			}
 		}
 
 		public override void DisableEvent (object eventId)
@@ -135,11 +210,25 @@ namespace Xwt.WPFBackend
 					break;
 				}
 			}
+
+			if (eventId is ListViewEvent) {
+				switch ((ListViewEvent)eventId) {
+				case ListViewEvent.RowActivated:
+					ListBox.MouseDoubleClick -= OnMouseDoubleClick;
+					break;
+				}
+			}
 		}
 
 		private void OnSelectionChanged (object sender, SelectionChangedEventArgs e)
 		{
 			ListBoxEventSink.OnSelectionChanged();
+		}
+
+		private void OnMouseDoubleClick (object sender, MouseButtonEventArgs e)
+		{
+			if (e.ChangedButton == MouseButton.Left)
+				ListBoxEventSink.OnRowActivated (ListBox.SelectedIndex);
 		}
 
 		protected ExListBox ListBox {
@@ -149,6 +238,58 @@ namespace Xwt.WPFBackend
 
 		protected IListBoxEventSink ListBoxEventSink {
 			get { return (IListBoxEventSink) EventSink; }
+		}
+
+		public int GetRowAtPosition(Point p)
+		{
+			var result = VisualTreeHelper.HitTest (ListBox, new System.Windows.Point (p.X, p.Y)) as PointHitTestResult;
+
+			var element = (result != null) ? result.VisualHit as FrameworkElement : null;
+			while (element != null) {
+				if (element is ListBoxItem)
+					break;
+				if (element is ExListBox) // We can't succeed past this point
+					return -1;
+
+				element = VisualTreeHelper.GetParent (element) as FrameworkElement;
+			}
+
+			if (element == null)
+				return -1;
+
+			int index = ListBox.ItemContainerGenerator.IndexFromContainer(element);
+			return index;
+		}
+
+		public Rectangle GetRowBounds (int row, bool includeMargin)
+		{
+			ListBoxItem item = ListBox.ItemContainerGenerator.ContainerFromIndex (row) as ListBoxItem;
+			if (item == null)
+				return Rectangle.Zero;
+
+			// this works only if the wpf layout remains the same
+			try {
+				var border = VisualTreeHelper.GetChild (item, 0) as FrameworkElement;
+
+				var rect = Rectangle.Zero;
+				if (includeMargin) {
+					var position = border.TransformToAncestor (ListBox).Transform (new System.Windows.Point (0, 0));
+					rect = new Rect (position, border.RenderSize).ToXwtRect();
+					rect.X -= ListBox.Padding.Left + ListBox.BorderThickness.Left;
+				} else {
+					var contentpresenter = VisualTreeHelper.GetChild (border, 0) as FrameworkElement;
+					var child = VisualTreeHelper.GetChild (contentpresenter, 0) as FrameworkElement;
+					var position = child.TransformToAncestor (ListBox).Transform(new System.Windows.Point(0,0));
+					rect = new Rect (position, child.RenderSize).ToXwtRect();
+					rect.X -= ListBox.Padding.Left + ListBox.BorderThickness.Left;
+				}
+
+				return rect;
+			} catch (ArgumentOutOfRangeException) {
+				return Rectangle.Zero;
+			} catch (ArgumentNullException) {
+				return Rectangle.Zero;
+			}
 		}
 	}
 }

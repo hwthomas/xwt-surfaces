@@ -41,6 +41,11 @@ namespace Xwt.Backends
 		Toolkit toolkit;
 		bool isGuest;
 
+		/// <summary>
+		/// Initialize the specified toolkit.
+		/// </summary>
+		/// <param name="toolkit">Toolkit to initialize.</param>
+		/// <param name="isGuest">If set to <c>true</c> the toolkit will be initialized as guest of another toolkit.</param>
 		internal void Initialize (Toolkit toolkit, bool isGuest)
 		{
 			this.toolkit = toolkit;
@@ -53,11 +58,20 @@ namespace Xwt.Backends
 			InitializeApplication ();
 		}
 
+		/// <summary>
+		/// Gets the toolkit engine backend.
+		/// </summary>
+		/// <returns>The toolkit backend.</returns>
+		/// <typeparam name="T">The Type of the toolkit backend.</typeparam>
 		public static T GetToolkitBackend<T> () where T : ToolkitEngineBackend
 		{
 			return (T)Toolkit.GetToolkitBackend (typeof (T));
 		}
 
+		/// <summary>
+		/// Gets the application context.
+		/// </summary>
+		/// <value>The application context.</value>
 		public ApplicationContext ApplicationContext {
 			get { return toolkit.Context; }
 		}
@@ -171,6 +185,25 @@ namespace Xwt.Backends
 		/// A native window reference.
 		/// </param>
 		public abstract IWindowFrameBackend GetBackendForWindow (object nativeWindow);
+
+		/// <summary>
+		/// Gets a native window reference from an Xwt window.
+		/// </summary>
+		/// <returns> The native window object. </returns>
+		/// <param name='window'> The Xwt window. </param>
+		public virtual object GetNativeWindow (WindowFrame window)
+		{
+			if (window == null)
+				return null;
+			return GetNativeWindow (window.GetBackend () as IWindowFrameBackend);
+		}
+
+		/// <summary>
+		/// Gets a native window reference from an Xwt window backend.
+		/// </summary>
+		/// <returns> The native window object. </returns>
+		/// <param name='backend'> The Xwt window backend. </param>
+		public abstract object GetNativeWindow (IWindowFrameBackend backend);
 		
 		/// <summary>
 		/// Gets the native parent window of a widget
@@ -195,18 +228,23 @@ namespace Xwt.Backends
 		/// </summary>
 		/// <returns>The backend for context.</returns>
 		/// <param name="nativeContext">The native context.</param>
-		public virtual object GetBackendForContext (object nativeContext)
+		public virtual object GetBackendForContext (object nativeWidget, object nativeContext)
 		{
 			return nativeContext;
 		}
 
+		/// <summary>
+		/// Gets the backend for a native image.
+		/// </summary>
+		/// <returns>The image backend .</returns>
+		/// <param name="nativeImage">The native image.</param>
 		public virtual object GetBackendForImage (object nativeImage)
 		{
 			return nativeImage;
 		}
 
 		/// <summary>
-		/// Gets a value indicating whether this <see cref="Xwt.Backends.EngineBackend"/> handles size negotiation on its own
+		/// Gets a value indicating whether this <see cref="ToolkitEngineBackend" /> handles size negotiation on its own
 		/// </summary>
 		/// <value>
 		/// <c>true</c> if the engine backend handles size negotiation; otherwise, <c>false</c>.
@@ -221,6 +259,11 @@ namespace Xwt.Backends
 				throw new InvalidOperationException ("XWT toolkit not initialized");
 		}
 
+		/// <summary>
+		/// Creates a backend for a frontend.
+		/// </summary>
+		/// <returns>The backend for the specified frontend.</returns>
+		/// <param name="frontendType">The Frontend type.</param>
 		internal IBackend CreateBackendForFrontend (Type frontendType)
 		{
 			CheckInitialized ();
@@ -232,7 +275,7 @@ namespace Xwt.Backends
 					throw new InvalidOperationException ("Backend type not specified for type: " + frontendType);
 				if (!typeof(IBackend).IsAssignableFrom (attr.Type))
 					throw new InvalidOperationException ("Backend type for frontend '" + frontendType + "' is not a IBackend implementation");
-				backendTypes.TryGetValue (attr.Type, out bt);
+				bt = GetBackendImplementationType (attr.Type);
 				backendTypesByFrontend [frontendType] = bt;
 			}
 			if (bt == null)
@@ -240,12 +283,16 @@ namespace Xwt.Backends
 			return (IBackend) Activator.CreateInstance (bt);
 		}
 
+		/// <summary>
+		/// Creates the backend.
+		/// </summary>
+		/// <returns>The backend.</returns>
+		/// <param name="backendType">The Backend type.</param>
 		internal object CreateBackend (Type backendType)
 		{
 			CheckInitialized ();
-			Type bt = null;
-			
-			if (!backendTypes.TryGetValue (backendType, out bt))
+			Type bt = GetBackendImplementationType (backendType);
+			if (bt == null)
 				return null;
 			var res = Activator.CreateInstance (bt);
 			if (!backendType.IsInstanceOfType (res))
@@ -255,17 +302,45 @@ namespace Xwt.Backends
 			return res;
 		}
 
+		/// <summary>
+		/// Gets the type that implements the provided backend interface
+		/// </summary>
+		/// <returns>The backend implementation type.</returns>
+		/// <param name="backendType">Backend interface type.</param>
+		protected virtual Type GetBackendImplementationType (Type backendType)
+		{
+			Type bt;
+			backendTypes.TryGetValue (backendType, out bt);
+			return bt;
+		}
+
+		/// <summary>
+		/// Creates the backend.
+		/// </summary>
+		/// <returns>The backend.</returns>
+		/// <typeparam name="T">The Backend type.</typeparam>
 		internal T CreateBackend<T> ()
 		{
 			return (T) CreateBackend (typeof(T));
 		}
 
+		/// <summary>
+		/// Registers a backend for an Xwt backend interface.
+		/// </summary>
+		/// <typeparam name="Backend">The backend Type</typeparam>
+		/// <typeparam name="Implementation">The Xwt interface implemented by the backend</typeparam>
 		public void RegisterBackend<Backend, Implementation> () where Implementation: Backend
 		{
 			CheckInitialized ();
 			backendTypes [typeof(Backend)] = typeof(Implementation);
 		}
 
+		/// <summary>
+		/// Creates the Xwt frontend for a backend.
+		/// </summary>
+		/// <returns>The Xwt frontend.</returns>
+		/// <param name="backend">The backend.</param>
+		/// <typeparam name="T">The frontend type.</typeparam>
 		public T CreateFrontend<T> (object backend)
 		{
 			return (T) Activator.CreateInstance (typeof(T), backend);
@@ -315,6 +390,10 @@ namespace Xwt.Backends
 		{
 		}
 
+		/// <summary>
+		/// Gets the information about Xwt features supported by the toolkit.
+		/// </summary>
+		/// <value>The supported features.</value>
 		public virtual ToolkitFeatures SupportedFeatures {
 			get { return ToolkitFeatures.All; }
 		}

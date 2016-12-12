@@ -31,6 +31,12 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Reflection.Emit;
 
+#if XWT_GTK3
+using GtkTreeModel = Gtk.ITreeModel;
+#else
+using GtkTreeModel = Gtk.TreeModel;
+#endif
+
 namespace Xwt.GtkBackend
 {
 	public static class GtkWorkarounds
@@ -103,7 +109,7 @@ namespace Xwt.GtkBackend
 		
 		static System.Reflection.MethodInfo glibObjectGetProp, glibObjectSetProp;
 		
-		public static int GtkMinorVersion = 12, GtkMicroVersion = 0;
+		public static int GtkMajorVersion = 2, GtkMinorVersion = 12, GtkMicroVersion = 0;
 		static bool oldMacKeyHacks = false;
 		
 		static GtkWorkarounds ()
@@ -115,13 +121,19 @@ namespace Xwt.GtkBackend
 			var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
 			glibObjectSetProp = typeof (GLib.Object).GetMethod ("SetProperty", flags);
 			glibObjectGetProp = typeof (GLib.Object).GetMethod ("GetProperty", flags);
-			
+
+			#if XWT_GTK3
+			GtkMajorVersion = (int)Gtk.Global.MajorVersion;
+			GtkMinorVersion = (int)Gtk.Global.MinorVersion;
+			GtkMicroVersion = (int)Gtk.Global.MicroVersion;
+			#else
 			foreach (int i in new [] { 24, 22, 20, 18, 16, 14 }) {
 				if (Gtk.Global.CheckVersion (2, (uint)i, 0) == null) {
 					GtkMinorVersion = i;
 					break;
 				}
 			}
+			#endif
 			
 			for (int i = 1; i < 20; i++) {
 				if (Gtk.Global.CheckVersion (2, (uint)GtkMinorVersion, (uint)i) == null) {
@@ -554,10 +566,10 @@ namespace Xwt.GtkBackend
 		/// <summary>Map raw GTK key input to work around platform bugs and decompose accelerator keys</summary>
 		/// <param name='evt'>The raw key event</param>
 		/// <param name='key'>The composed key</param>
-		/// <param name='mod'>The composed modifiers</param>
+		/// <param name='state'>The composed modifiers</param>
 		/// <param name='shortcuts'>All the key/modifier decompositions that can be used as accelerators</param>
 		public static void MapKeys (Gdk.EventKey evt, out Gdk.Key key, out Gdk.ModifierType state,
-		                            out KeyboardShortcut[] shortcuts)
+									out KeyboardShortcut[] shortcuts)
 		{
 			//this uniquely identifies the raw key
 			ulong id;
@@ -581,7 +593,7 @@ namespace Xwt.GtkBackend
 			Gdk.ModifierType modifier = evt.State;
 			byte grp = evt.Group;
 			
-			if (GtkMinorVersion >= 20) {
+			if (GtkMajorVersion > 2 || GtkMajorVersion <= 2 && GtkMinorVersion >= 20) {
 				gdk_keymap_add_virtual_modifiers (keymap.Handle, ref modifier);
 			}
 			
@@ -726,7 +738,7 @@ namespace Xwt.GtkBackend
 			mod = accels[0].Modifier;
 		}
 
-		[System.Runtime.InteropServices.DllImport ("libgdk-win32-2.0-0.dll", CallingConvention = CallingConvention.Cdecl)]
+		[System.Runtime.InteropServices.DllImport (GtkInterop.LIBGDK, CallingConvention = CallingConvention.Cdecl)]
 		static extern IntPtr gdk_win32_drawable_get_handle (IntPtr drawable);
 		
 		enum DwmWindowAttribute
@@ -823,7 +835,7 @@ namespace Xwt.GtkBackend
 			objc_msgSend_IntPtr (ptr, sel_invalidateShadow);
 		}
 
-		[DllImport ("gtksharpglue-2", CallingConvention = CallingConvention.Cdecl)]
+		[DllImport (GtkInterop.LIBGTKGLUE, CallingConvention = CallingConvention.Cdecl)]
 		static extern void gtksharp_container_leak_fixed_marker ();
 
 		static HashSet<Type> fixedContainerTypes;
@@ -975,12 +987,12 @@ namespace Xwt.GtkBackend
 		[UnmanagedFunctionPointer (CallingConvention.Cdecl)]
 		delegate void ForallDelegate (IntPtr container, bool include_internals, IntPtr cb, IntPtr data);
 		
-		[DllImport("gtksharpglue-2", CallingConvention = CallingConvention.Cdecl)]
+		[DllImport(GtkInterop.LIBGTKGLUE, CallingConvention = CallingConvention.Cdecl)]
 		static extern void gtksharp_container_override_forall (IntPtr gtype, ForallDelegate cb);
 
 		public static void SetLinkHandler (this Gtk.Label label, Action<string> urlHandler)
 		{
-			if (GtkMinorVersion >= 18)
+			if (GtkMajorVersion > 2 || GtkMajorVersion <= 2 && GtkMinorVersion >= 18)
 				new UrlHandlerClosure (urlHandler).ConnectTo (label);
 		}
 
@@ -1003,8 +1015,7 @@ namespace Xwt.GtkBackend
 
 			public void ConnectTo (Gtk.Label label)
 			{
-				var signal = GLib.Signal.Lookup (label, "activate-link", typeof(ActivateLinkEventArgs));
-				signal.AddDelegate (new EventHandler<ActivateLinkEventArgs> (HandleLink));
+				label.AddSignalHandler ("activate-link", new EventHandler<ActivateLinkEventArgs> (HandleLink), typeof(ActivateLinkEventArgs));
 			}
 
 			class ActivateLinkEventArgs : GLib.SignalArgs
@@ -1055,7 +1066,7 @@ namespace Xwt.GtkBackend
 
 		//the GTK# version of this has 'out' instead of 'ref', preventing passing the x,y values in
 		public static bool GetTooltipContext (this Gtk.TreeView tree, ref int x, ref int y, bool keyboardTip,
-			 out Gtk.TreeModel model, out Gtk.TreePath path, out Gtk.TreeIter iter)
+			 out GtkTreeModel model, out Gtk.TreePath path, out Gtk.TreeIter iter)
 		{
 			IntPtr intPtr = Marshal.AllocHGlobal (Marshal.SizeOf (typeof (Gtk.TreeIter)));
 			IntPtr handle;
@@ -1073,29 +1084,33 @@ namespace Xwt.GtkBackend
 
 		public static void ForceImageOnMenuItem (Gtk.ImageMenuItem mi)
 		{
-			if (GtkMinorVersion >= 16)
+			if (GtkMajorVersion > 2 || GtkMajorVersion <= 2 && GtkMinorVersion >= 16)
 				gtk_image_menu_item_set_always_show_image (mi.Handle, true);
 		}
 
-		
+		#if XWT_GTK3
+		// GTK3: Temp workaround, since GTK 3 has gtk_widget_get_scale_factor, but no gtk_icon_set_render_icon_scaled
+		static bool supportsHiResIcons = false;
+		#else
 		static bool supportsHiResIcons = true;
+		#endif
 
-		[DllImport (GtkInterop.LIBGTK)]
+		[DllImport (GtkInterop.LIBGTK, CallingConvention = CallingConvention.Cdecl)]
 		static extern void gtk_icon_source_set_scale (IntPtr source, double scale);
 
-		[DllImport (GtkInterop.LIBGTK)]
+		[DllImport (GtkInterop.LIBGTK, CallingConvention = CallingConvention.Cdecl)]
 		static extern void gtk_icon_source_set_scale_wildcarded (IntPtr source, bool setting);
 
-		[DllImport (GtkInterop.LIBGTK)]
+		[DllImport (GtkInterop.LIBGTK, CallingConvention = CallingConvention.Cdecl)]
 		static extern double gtk_widget_get_scale_factor (IntPtr widget);
 
-		[DllImport (GtkInterop.LIBGDK)]
+		[DllImport (GtkInterop.LIBGDK, CallingConvention = CallingConvention.Cdecl)]
 		static extern double gdk_screen_get_monitor_scale_factor (IntPtr widget, int monitor);
 
-		[DllImport (GtkInterop.LIBGOBJECT)]
+		[DllImport (GtkInterop.LIBGOBJECT, CallingConvention = CallingConvention.Cdecl)]
 		static extern IntPtr g_object_get_data (IntPtr source, string name);
 
-		[DllImport (GtkInterop.LIBGTK)]
+		[DllImport (GtkInterop.LIBGTK, CallingConvention = CallingConvention.Cdecl)]
 		static extern IntPtr gtk_icon_set_render_icon_scaled (IntPtr handle, IntPtr style, int direction, int state, int size, IntPtr widget, IntPtr intPtr, ref double scale);
 
 		public static bool SetSourceScale (Gtk.IconSource source, double scale)
@@ -1198,6 +1213,258 @@ namespace Xwt.GtkBackend
 			}
 			supportsHiResIcons = false;
 			return null;
+		}
+
+
+		public static Gtk.Bin CreateComboBoxEntry()
+		{
+			#if XWT_GTK3
+			return Gtk.ComboBoxText.NewWithEntry ();
+			#else
+			return new Gtk.ComboBoxEntry ();
+			#endif
+		}
+
+
+		/// <summary>
+		/// Adjusts pointer coordinates to be relative to the widget.
+		/// </summary>
+		/// <returns>The pointer coordinates.</returns>
+		/// <param name="widget">The Widget.</param>
+		/// <param name="eventWindow">The event source window.</param>
+		/// <param name="x">The events pointer x coordinate.</param>
+		/// <param name="y">The events pointer y coordinate.</param>
+		/// <remarks>
+		/// Some widgets have additional child Gdk windows (or real child widgets if
+		/// the widget is a container) on top of their root window.
+		/// In this case pointer events may come from child windows and contain
+		/// wrong coordinates (relative to child window and not to the widget itself).
+		/// 
+		/// CheckPointerCoordinates checks whether the events source window is not
+		/// the widgets root window and adjusts the coordinates to relative
+		/// to the widget and not to its child.
+		///</remarks>
+		public static Xwt.Point CheckPointerCoordinates (this Gtk.Widget widget, Gdk.Window eventWindow, double x, double y)
+		{
+			if (widget.GdkWindow != eventWindow)
+			{
+				int pointer_x, pointer_y;
+				widget.GetPointer (out pointer_x, out pointer_y);
+				return new Xwt.Point (pointer_x, pointer_y);
+			}
+			return new Xwt.Point (x, y);
+		}
+
+
+		[DllImport(GtkInterop.LIBGTK, CallingConvention = CallingConvention.Cdecl)]
+		static extern IntPtr gtk_message_dialog_get_message_area(IntPtr raw);
+		
+		public static Gtk.Box GetMessageArea(this Gtk.MessageDialog dialog)
+		{
+			#if XWT_GTK3
+			// according to Gtk docs MessageArea should always be a Gtk.Box, but we test this
+			// to be on the safe side.
+			var messageArea = dialog.MessageArea as Gtk.Box;
+			return messageArea ?? dialog.ContentArea;
+			#else
+			if (GtkWorkarounds.GtkMajorVersion <= 2 && GtkWorkarounds.GtkMinorVersion < 22) // message area not present before 2.22
+				return dialog.VBox;
+			IntPtr raw_ret = gtk_message_dialog_get_message_area(dialog.Handle);
+			Gtk.Box ret = GLib.Object.GetObject(raw_ret) as Gtk.Box;
+			return ret;
+			#endif
+		}
+
+
+		[DllImport(GtkInterop.LIBGOBJECT, CallingConvention = CallingConvention.Cdecl)]
+		static extern IntPtr g_signal_stop_emission_by_name(IntPtr raw, string name);
+
+		public static void StopSignal (this GLib.Object gobject, string signalid)
+		{
+			g_signal_stop_emission_by_name (gobject.Handle, signalid);
+		}
+
+		[DllImport(GtkInterop.LIBGTK, CallingConvention = CallingConvention.Cdecl)]
+		static extern IntPtr gtk_binding_set_find (string setName);
+		[DllImport(GtkInterop.LIBGTK, CallingConvention = CallingConvention.Cdecl)]
+		static extern void gtk_binding_entry_remove (IntPtr bindingSet, uint keyval, Gdk.ModifierType modifiers);
+
+		public static void RemoveKeyBindingFromClass (GLib.GType gtype, Gdk.Key key, Gdk.ModifierType modifiers)
+		{
+			var bindingSet = gtk_binding_set_find (gtype.ToString ());
+			if (bindingSet != IntPtr.Zero)
+				gtk_binding_entry_remove (bindingSet, (uint)key, modifiers);
+		}
+
+		[DllImport (GtkInterop.LIBGTK, CallingConvention = CallingConvention.Cdecl)]
+		static extern void gtk_object_set_data (IntPtr raw, IntPtr key, IntPtr data);
+
+		public static void SetData<T> (GLib.Object gtkobject, string key, T data) where T : struct
+		{
+			IntPtr pkey = GLib.Marshaller.StringToPtrGStrdup (key);
+			IntPtr pdata = Marshal.AllocHGlobal (Marshal.SizeOf (data));
+			Marshal.StructureToPtr (data, pdata, false);
+			gtk_object_set_data (gtkobject.Handle, pkey, pdata);
+			Marshal.FreeHGlobal (pdata);
+			GLib.Marshaller.Free (pkey);
+			gtkobject.Data [key] = data;
+		}
+
+		public static void SetTransparentBgHint (this Gtk.Widget widget, bool enable)
+		{
+			SetData (widget, "transparent-bg-hint", enable);
+		}
+
+		[DllImport (GtkInterop.LIBGTK)]
+		static extern IntPtr gdk_x11_drawable_get_xid (IntPtr window);
+
+		public static IntPtr GetGtkWindowNativeHandle (Gtk.Window window)
+		{
+			if (window?.GdkWindow == null)
+				return IntPtr.Zero;
+			if (Platform.IsMac)
+				return gdk_quartz_window_get_nswindow (window.GdkWindow.Handle);
+			if (Platform.IsWindows)
+				return gdk_win32_drawable_get_handle (window.GdkWindow.Handle);
+			return gdk_x11_drawable_get_xid (window.GdkWindow.Handle);
+		}
+
+		[DllImport(GtkInterop.LIBGTK, CallingConvention = CallingConvention.Cdecl)]
+		private static extern bool gtk_selection_data_set_uris(IntPtr raw, IntPtr[] uris);
+
+		[DllImport(GtkInterop.LIBGTK, CallingConvention = CallingConvention.Cdecl)]
+		private static extern IntPtr gtk_selection_data_get_uris(IntPtr raw);
+
+		public static bool SetUris(this Gtk.SelectionData data, string[] uris)
+		{
+			return gtk_selection_data_set_uris(data.Handle, GLib.Marshaller.StringArrayToNullTermPointer(uris));
+		}
+
+		public static string[] GetUris(this Gtk.SelectionData data)
+		{
+			var strPtr = gtk_selection_data_get_uris (data.Handle);
+			return GLib.Marshaller.PtrToStringArrayGFree (strPtr);
+		}
+
+		public static bool GetTagForAttributes (this Pango.AttrIterator iter, string name, out Gtk.TextTag tag)
+		{
+			tag = new Gtk.TextTag (name);
+			bool result = false;
+
+			using (var attr = iter.SafeGetCopy (Pango.AttrType.Family)) {
+				if (attr != null) {
+					tag.Family = ((Pango.AttrFamily)attr).Family;
+					result = true;
+				}
+			}
+
+			using (var attr = iter.SafeGetCopy (Pango.AttrType.Style)) {
+				if (attr != null) {
+					tag.Style = ((Pango.AttrStyle)attr).Style;
+					result = true;
+				}
+			}
+
+			using (var attr = iter.SafeGetCopy (Pango.AttrType.Weight)) {
+				if (attr != null) {
+					tag.Weight = ((Pango.AttrWeight)attr).Weight;
+					result = true;
+				}
+			}
+
+			using (var attr = iter.SafeGetCopy (Pango.AttrType.Variant)) {
+				if (attr != null) {
+					tag.Variant = ((Pango.AttrVariant)attr).Variant;
+					result = true;
+				}
+			}
+
+			using (var attr = iter.SafeGetCopy (Pango.AttrType.Stretch)) {
+				if (attr != null) {
+					tag.Stretch = ((Pango.AttrStretch)attr).Stretch;
+					result = true;
+				}
+			}
+
+			using (var attr = iter.SafeGetCopy (Pango.AttrType.FontDesc)) {
+				if (attr != null) {
+					tag.FontDesc = ((Pango.AttrFontDesc)attr).Desc;
+					result = true;
+				}
+			}
+
+			using (var attr = iter.SafeGetCopy (Pango.AttrType.Foreground)) {
+				if (attr != null) {
+					#if XWT_GTK3
+					tag.Foreground = ((Pango.AttrForeground)attr).Color.ToString();
+					#else
+					tag.Foreground = ((Gdk.PangoAttrEmbossColor)attr).Color.ToString ();
+					#endif
+					result = true;
+				}
+			}
+
+			using (var attr = iter.SafeGetCopy (Pango.AttrType.Background)) {
+				if (attr != null) {
+				#if XWT_GTK3
+					tag.Foreground = ((Pango.AttrBackground)attr).Color.ToString();
+					#else
+					tag.Background = ((Gdk.PangoAttrEmbossColor)attr).Color.ToString ();
+					#endif
+					result = true;
+				}
+			}
+
+			using (var attr = iter.SafeGetCopy (Pango.AttrType.Underline)) {
+				if (attr != null) {
+					tag.Underline = ((Pango.AttrUnderline)attr).Underline;
+					result = true;
+				}
+			}
+
+			using (var attr = iter.SafeGetCopy (Pango.AttrType.Strikethrough)) {
+				if (attr != null) {
+					tag.Strikethrough = ((Pango.AttrStrikethrough)attr).Strikethrough;
+					result = true;
+				}
+			}
+
+			using (var attr = iter.SafeGetCopy (Pango.AttrType.Rise)) {
+				if (attr != null) {
+					tag.Rise = ((Pango.AttrRise)attr).Rise;
+					result = true;
+				}
+			}
+
+			using (var attr = iter.SafeGetCopy (Pango.AttrType.Scale)) {
+				if (attr != null) {
+					tag.Scale = ((Pango.AttrScale)attr).Scale;
+					result = true;
+				}
+			}
+
+			return result;
+		}
+
+		[DllImport (GtkInterop.LIBPANGO, CallingConvention = CallingConvention.Cdecl)]
+		private static extern IntPtr pango_attribute_copy (IntPtr raw);
+
+		[DllImport (GtkInterop.LIBPANGO, CallingConvention = CallingConvention.Cdecl)]
+		private static extern IntPtr pango_attr_iterator_get (IntPtr raw, int type);
+
+		public static Pango.Attribute SafeGetCopy (this Pango.AttrIterator iter, Pango.AttrType type)
+		{
+			try {
+				IntPtr raw = pango_attr_iterator_get (iter.Handle, (int)type);
+				if (raw != IntPtr.Zero) {
+					var copy = pango_attribute_copy (raw);
+					var attr = Pango.Attribute.GetAttribute (copy);
+					return attr;
+				} else
+					return null;
+			} catch {
+				return null;
+			}
 		}
 	}
 	

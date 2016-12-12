@@ -27,14 +27,17 @@
 using System;
 using Xwt.Backends;
 using Xwt.Drawing;
+using Xwt.CairoBackend;
 
 
 namespace Xwt.GtkBackend
 {
-	public class ButtonBackend: WidgetBackend, IButtonBackend
+	public partial class ButtonBackend: WidgetBackend, IButtonBackend
 	{
 		protected bool ignoreClickEvents;
 		ImageDescription image;
+		Pango.FontDescription customFont;
+		Gtk.Label labelWidget;
 		
 		public ButtonBackend ()
 		{
@@ -42,6 +45,7 @@ namespace Xwt.GtkBackend
 
 		public override void Initialize ()
 		{
+			NeedsEventBox = false;
 			Widget = new Gtk.Button ();
 			base.Widget.Show ();
 			
@@ -54,6 +58,40 @@ namespace Xwt.GtkBackend
 		
 		protected new IButtonEventSink EventSink {
 			get { return (IButtonEventSink)base.EventSink; }
+		}
+
+		protected override void OnSetBackgroundColor (Color color)
+		{
+			Widget.SetBackgroundColor (color);
+			Widget.SetBackgroundColor (Gtk.StateType.Prelight, color);
+		}
+
+		Color? customLabelColor;
+
+		public virtual Color LabelColor {
+			get {
+				return customLabelColor.HasValue ? customLabelColor.Value : Widget.Style.Foreground (Gtk.StateType.Normal).ToXwtValue ();
+			}
+			set {
+				customLabelColor = value;
+				Widget.SetForegroundColor (value);
+				Widget.SetForegroundColor (Gtk.StateType.Prelight, value);
+				if (labelWidget != null) {
+					labelWidget.SetForegroundColor (value);
+					labelWidget.SetForegroundColor (Gtk.StateType.Prelight, value);
+				}
+			}
+		}
+
+		public override object Font {
+			get {
+				return base.Font;
+			}
+			set {
+				base.Font = value;
+				customFont = value as Pango.FontDescription;
+				SetButtonType (ButtonType.Normal);
+			}
 		}
 		
 		public void SetContent (string label, bool useMnemonic, ImageDescription image, ContentPosition position)
@@ -83,33 +121,36 @@ namespace Xwt.GtkBackend
 			if (image.Backend != null)
 				imageWidget = new ImageBox (ApplicationContext, image.WithDefaultSize (Gtk.IconSize.Button));
 
+			labelWidget = null;
+
 			if (label != null && imageWidget == null) {
-				contentWidget = new Gtk.Label (label) { UseUnderline = useMnemonic }; 
+				contentWidget = labelWidget = new Gtk.Label (label);
 			}
 			else if (label == null && imageWidget != null) {
 				contentWidget = imageWidget;
 			}
 			else if (label != null && imageWidget != null) {
 				Gtk.Box box = position == ContentPosition.Left || position == ContentPosition.Right ? (Gtk.Box) new Gtk.HBox (false, 3) : (Gtk.Box) new Gtk.VBox (false, 3);
-				var lab = new Gtk.Label (label) { UseUnderline = useMnemonic };
+				labelWidget = new Gtk.Label (label) { UseUnderline = useMnemonic };
 				
 				if (position == ContentPosition.Left || position == ContentPosition.Top) {
 					box.PackStart (imageWidget, false, false, 0);
-					box.PackStart (lab, false, false, 0);
+					box.PackStart (labelWidget, false, false, 0);
 				} else {
-					box.PackStart (lab, false, false, 0);
+					box.PackStart (labelWidget, false, false, 0);
 					box.PackStart (imageWidget, false, false, 0);
 				}
 				
 				contentWidget = box;
 			}
+			var expandButtonContent = false;
 			if (b.Type == ButtonType.DropDown) {
 				if (contentWidget != null) {
 					Gtk.HBox box = new Gtk.HBox (false, 3);
 					box.PackStart (contentWidget, true, true, 3);
-					box.PackStart (new Gtk.VSeparator (), true, true, 0);
 					box.PackStart (new Gtk.Arrow (Gtk.ArrowType.Down, Gtk.ShadowType.Out), false, false, 0);
 					contentWidget = box;
+					expandButtonContent = true;
 				} else
 					contentWidget = new Gtk.Arrow (Gtk.ArrowType.Down, Gtk.ShadowType.Out);
 			}
@@ -117,6 +158,32 @@ namespace Xwt.GtkBackend
 				contentWidget.ShowAll ();
 				Widget.Label = null;
 				Widget.Image = contentWidget;
+				var alignment = Widget.Child as Gtk.Alignment;
+				if (alignment != null) {
+					if (expandButtonContent) {
+						var box = alignment.Child as Gtk.Box;
+						if (box != null) {
+							alignment.Xscale = 1;
+							box.SetChildPacking (box.Children [0], true, true, 0, Gtk.PackType.Start);
+							if (labelWidget != null)
+								labelWidget.Xalign = 0;
+						}
+					} else if (position == ContentPosition.Left && (contentWidget is Gtk.Box)) {
+						// in case the button is wider than its natural size and has text and an image on the left,
+						// optimize its alignment to make the text more centered.
+						// FIXME: more sophisticated size calculation
+						alignment.Xalign = 0.475f;
+					}
+				}
+				if (labelWidget != null) {
+					labelWidget.UseUnderline = useMnemonic;
+					if (customFont != null)
+						labelWidget.ModifyFont (customFont);
+					if (customLabelColor.HasValue) {
+						labelWidget.SetForegroundColor (customLabelColor.Value);
+						labelWidget.SetForegroundColor (Gtk.StateType.Prelight, customLabelColor.Value);
+					}
+				}
 			} else
 				Widget.Label = null;
 		}
@@ -186,31 +253,16 @@ namespace Xwt.GtkBackend
 				return;
 			this.miniMode = miniMode;
 			if (miniMode) {
-				Widget.ExposeEvent += HandleExposeEvent;
 				Widget.SizeAllocated += HandleSizeAllocated;
-				Widget.SizeRequested += HandleSizeRequested;
 			}
+			SetMiniModeGtk(miniMode);
 			Widget.QueueResize ();
-		}
-
-		void HandleSizeRequested (object o, Gtk.SizeRequestedArgs args)
-		{
-			args.Requisition = Widget.Child.SizeRequest ();
 		}
 
 		[GLib.ConnectBefore]
 		void HandleSizeAllocated (object o, Gtk.SizeAllocatedArgs args)
 		{
 			Widget.Child.SizeAllocate (args.Allocation);
-			args.RetVal = true;
-		}
-
-		[GLib.ConnectBefore]
-		void HandleExposeEvent (object o, Gtk.ExposeEventArgs args)
-		{
-			var gc = Widget.Style.BackgroundGC (Widget.State);
-			Widget.GdkWindow.DrawRectangle (gc, true, Widget.Allocation);
-			Widget.PropagateExpose (Widget.Child, args.Event);
 			args.RetVal = true;
 		}
 	}

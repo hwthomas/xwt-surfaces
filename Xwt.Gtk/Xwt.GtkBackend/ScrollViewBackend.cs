@@ -74,8 +74,16 @@ namespace Xwt.GtkBackend
 					vp.Add (w);
 					Widget.Child = vp;
 				}
-				else if (w is Gtk.Viewport)
+				#if XWT_GTK3
+				else if (w is Gtk.IScrollable)
 					Widget.Child = w;
+				#else
+				// Gtk2 has no interface for natively scrollable widgets, therefore we manually check
+				// for types that should not be packed into a Viewport.
+				// see: https://developer.gnome.org/gtk2/stable/GtkScrolledWindow.html#gtk-scrolled-window-add-with-viewport
+				else if (w is Gtk.Viewport || w is Gtk.TreeView || w is Gtk.TextView || w is Gtk.Layout || w is WebKit.WebView)
+					Widget.Child = w;
+				#endif
 				else {
 					Gtk.Viewport vp = new Gtk.Viewport ();
 					vp.Show ();
@@ -165,12 +173,26 @@ namespace Xwt.GtkBackend
 				Widget.HscrollbarPolicy = value.ToGtkValue ();
 			}
 		}
+
+		public IScrollControlBackend CreateVerticalScrollControl ()
+		{
+			return new ScrollControltBackend (Widget.Vadjustment);
+		}
+
+		public IScrollControlBackend CreateHorizontalScrollControl ()
+		{
+			return new ScrollControltBackend (Widget.Hadjustment);
+		}
 	}
-	
-	class CustomViewPort: Gtk.Bin
+
+	sealed class CustomViewPort: GtkViewPort
 	{
 		Gtk.Widget child;
 		IWidgetEventSink eventSink;
+
+		public CustomViewPort (IntPtr raw) : base (raw)
+		{
+		}
 		
 		public CustomViewPort (IWidgetEventSink eventSink)
 		{
@@ -183,21 +205,21 @@ namespace Xwt.GtkBackend
 			child = widget;
 		}
 
-		protected override void OnSizeRequested (ref Gtk.Requisition requisition)
-		{
-			if (child != null) {
-				requisition = child.SizeRequest ();
-			} else {
-				requisition.Width = 0;
-				requisition.Height = 0;
-			}
-		}
-
 		protected override void OnSizeAllocated (Gdk.Rectangle allocation)
 		{
 			base.OnSizeAllocated (allocation);
 			if (child != null)
 				child.SizeAllocate (allocation);
+		}
+
+		protected override void OnSizeRequested (ref Gtk.Requisition requisition)
+		{
+			if (Child != null) {
+				requisition = Child.SizeRequest ();
+			} else {
+				requisition.Width = 0;
+				requisition.Height = 0;
+			}
 		}
 
 		protected override void OnSetScrollAdjustments (Gtk.Adjustment hadj, Gtk.Adjustment vadj)
