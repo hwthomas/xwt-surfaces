@@ -228,8 +228,6 @@
     </Compile>
     <Compile Include="..\Xwt.XamMac\Xwt.Mac\StatusIconBackend.cs">
       <Link>Xwt.Mac\StatusIconBackend.cs</Link>
-    <Compile Include="..\Xwt.XamMac\Xwt.Mac\MacSurfaceBackendHandler.cs">
-      <Link>Xwt.Mac\MacSurfaceBackendHandler.cs</Link>
     </Compile>
     <Compile Include="..\Xwt.XamMac\Xwt.Mac\TableViewBackend.cs">
       <Link>Xwt.Mac\TableViewBackend.cs</Link>
@@ -298,7 +296,9 @@
     <Compile Include="..\Xwt.XamMac\Xwt.Mac\NSApplicationInitializer.cs">
       <Link>Xwt.Mac\NSApplicationInitializer.cs</Link>
     </Compile>
->>>>>>> master
+    <Compile Include="..\Xwt.XamMac\Xwt.Mac\MacSurfaceBackendHandler.cs">
+      <Link>Xwt.Mac\MacSurfaceBackendHandler.cs</Link>
+    </Compile>
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <ItemGroup>
