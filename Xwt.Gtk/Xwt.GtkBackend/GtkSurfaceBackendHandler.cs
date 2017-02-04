@@ -64,9 +64,9 @@ namespace Xwt.GtkBackend
 				using (var target = similar.GetTarget ()) {
 					return target.CreateSimilar (Cairo.Content.ColorAlpha, (int)width, (int)height);
 				}
-			} else {
+			} else
 				return new Cairo.ImageSurface (Cairo.Format.ARGB32, (int)width, (int)height);
-			}
+			
 		}
 
 		public override object CreateSurfaceCompatibleWithSurface (object surfaceBackend, double width, double height)
@@ -75,16 +75,25 @@ namespace Xwt.GtkBackend
 			if (Platform.IsMac) {
 				return new QuartzSurface (Cairo.Format.ARGB32, (int)width, (int)height);
 			} else if (Platform.IsWindows) {
-				var surface = (Cairo.Surface)surfaceBackend;
+				Cairo.Surface surface = (Cairo.Surface)surfaceBackend;
 				return surface.CreateSimilar (Cairo.Content.ColorAlpha, (int)width, (int)height);
 			} else {
 				return new Cairo.ImageSurface (Cairo.Format.ARGB32, (int)width, (int)height);
+				//Cairo.Surface surface = (Cairo.Surface)surfaceBackend;
+				//return surface.CreateSimilar (Cairo.Content.ColorAlpha, (int)width, (int)height);
 			}
+		}
+
+		public override object CreateSurfaceCompatibleWithContext (object contextBackend, double width, double height)
+		{
+			var context = ((CairoContextBackend)contextBackend).Context;
+			Cairo.Surface cs = context.GetTarget ();
+			return cs.CreateSimilar (Cairo.Content.ColorAlpha, (int)width, (int)height);
 		}
 
 		public override object CreateContext (object backend)
 		{
-			var sf = (Cairo.Surface)backend;
+			Cairo.Surface sf = (Cairo.Surface)backend;
 			CairoContextBackend ctx = new CairoContextBackend (scaleFactor);
 			ctx.Context = new Cairo.Context (sf);
 			return ctx;

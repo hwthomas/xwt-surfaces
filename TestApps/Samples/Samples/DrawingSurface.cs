@@ -36,11 +36,11 @@ namespace Samples
 			Button run = new Button ("Run Test");
 			PackStart (run);
 
-			Label results = new Label ();
+			Label results = new Label ("Number of DrawCalls: 0 \t Time taken: 0mS");
 			PackStart (results);
 
 			var st = new SurfaceTest ();
-			PackStart (st);
+			PackStart (st, true, true);
 
 			run.Clicked += delegate {
 				run.Sensitive = false;
@@ -49,11 +49,12 @@ namespace Samples
 
 			st.TestFinished += delegate {
 				run.Sensitive = true;
-				results.Text = string.Format ("Draw: {0} FPS\nBitmap: {1} FPS\nVector image: {2} FPS\nSurface: {3} FPS", st.DrawFPS, st.BitmapFPS, st.ImageFPS, st.SurfaceFPS);
+				results.Text = string.Format (" Number of DrawCalls: {0} \t Time taken: {1} mS", st.DrawCalls, st.DrawTime);
 				Console.WriteLine (results.Text);
 			};
 		}
 	}
+
 
 	class SurfaceTest: Canvas
 	{
@@ -61,89 +62,122 @@ namespace Samples
 
 		Image vectorImage;
 		Image bitmap;
-		Surface surface;
-		int testTime = 1000;
-		double size = 500;
-		double iterations = 20;
 		Image cow;
 
-		public int DrawFPS { get; private set; }
-		public int BitmapFPS { get; private set; }
-		public int ImageFPS { get; private set; }
-		public int SurfaceFPS { get; private set; }
+		Surface cache = null;
+		double width;
+		double height;
+
+		public int DrawCalls { get; private set; }			// number of drawing calls
+		public double DrawTime { get; private set; }		// drawing directly to Canvas
+		public double BitmapTime { get; private set; }		// 
+		public double ImageTime { get; private set; }
+		public double SurfaceTime { get; private set; }
 
 		public event EventHandler TestFinished;
 
 		public SurfaceTest ()
 		{
-			cow = Image.FromResource ("cow.jpg").WithBoxSize (size - 50);
-			var ib = new ImageBuilder (size, size);
+			width = Bounds.Width;
+			height = Bounds.Height;
+			cow = Image.FromResource ("cow.jpg").WithBoxSize (Math.Max (width, height) - 50);
+			var ib = new ImageBuilder (width, height);
 			DrawScene (ib.Context);
 			bitmap = ib.ToBitmap ();
 			vectorImage = ib.ToVectorImage ();
-			WidthRequest = size;
-			HeightRequest = size;
+			WidthRequest = width;
+			HeightRequest = height;
+			DrawCalls = 1000;
 		}
 
 		public void StartTest ()
 		{
+			width = Bounds.Width;
+			height = Bounds.Height;
 			testMode = true;
 			QueueDraw ();
 		}
 
+		protected override void OnBoundsChanged ()
+		{
+			base.OnBoundsChanged ();
+			cache = null;		// ensure new cache created
+		}
+
 		protected override void OnDraw (Context ctx, Rectangle dirtyRect)
 		{
-			if (surface == null) {
-				surface = new Surface (size, size, this);
-				DrawScene (surface.Context);
+			width = Bounds.Width;
+			height = Bounds.Height;
+			// If creating cache from Context ctx, it can only be set up here on the first OnDraw call
+			// By initialising it to null when SurfaceTest is created, any type of surface cache can be used
+			if (cache == null) {
+				Size s = new Size (width, height);
+				//cache = new Surface (s, this);	// surface compatible with Canvas (this)
+				cache = new Surface (s, ctx);		// surface compatible with Context (ctx)
+				var sc = cache.Context;
+				DrawScene (sc);						// use context to draw (once) to cache
 			}
-			ctx.DrawSurface (surface, 0, 0);
+			ctx.DrawSurface (cache, 0, 0);			// copy from cache to Canvas on first OnDraw call
+
 			if (!testMode)
 				return;
 
-			DrawFPS = TimedDraw (delegate {
-				DrawScene (ctx);
-			});
+			//DrawTime = TimedDraw (delegate { DrawScene (ctx);});		// draw scene to Canvas
+			//DrawTime = TimedDraw (delegate { DrawScene (cctx);});		// draw scene to Cache
 
-			BitmapFPS = TimedDraw (delegate {
-				ctx.DrawImage (bitmap, 0, 0);
-			});
+			//BitmapTime = TimedDraw (delegate { ctx.DrawImage (bitmap, 0, 0);});	// draw image from Bitmap cache
+			//ImageTime = TimedDraw (delegate { ctx.DrawImage (vectorImage, 0, 0);});	// draw image from Vector cache
 
-			ImageFPS = TimedDraw (delegate {
-				ctx.DrawImage (vectorImage, 0, 0);
-			});
-
-			SurfaceFPS = TimedDraw (delegate {
-				ctx.DrawSurface (surface, 0, 0);
-			});
+			DrawTime = TimedDraw (delegate { DrawScene (ctx);});	// draw to context
 
 			testMode = false;
 			if (TestFinished != null)
 				TestFinished (this, EventArgs.Empty);
 		}
 
-		int TimedDraw (Action draw)
+		double TimedDraw (Action draw)
 		{
 			var t = DateTime.Now;
 			var n = 0;
-			while ((DateTime.Now - t).TotalMilliseconds < testTime) {
+			while ( n < this.DrawCalls) {
 				draw ();
 				n++;
 			}
-			return n;
+			return (DateTime.Now - t).TotalMilliseconds;
 		}
 
 		void DrawScene (Context ctx)
 		{
-			ctx.SetLineWidth (1);
-			ctx.SetColor (Colors.Black);
-			for (int n = 1; n < iterations; n += 3) {
-				ctx.Rectangle (0, 0, (size / iterations) * n, (size / iterations) * n);
+			// Draw a fairly complicated 'background' scene
+
+			double iterations = 15;
+			double centre;
+			double radius;
+			double x0;
+			double wn;
+
+			ctx.Save ();
+			ctx.Scale (1.0, height/width);  // scale for width and height
+			centre = width / 2.0;
+			ctx.SetLineWidth (1.0);			// Note - this is also scaled
+			   
+			for (int n = 1; n <= iterations; n += 1) {
+				// draw all figures based on width, as height scaling is in place
+				// (1) draw rectangles
+				ctx.SetColor (Colors.Blue);
+				x0 = 0;
+				wn = width * n / iterations;
+				ctx.Rectangle (x0, x0, wn, wn );
 				ctx.Stroke ();
-				ctx.Arc (size/2, size/2, ((size / iterations) * n) / 2, 0, 360);
+				// (2) draw ellipses
+				ctx.SetColor (Colors.Green);
+				x0 = centre;
+				radius = 0.5 * width * n / iterations;
+				ctx.Arc (x0, x0, radius, 0, 360);
 				ctx.Stroke ();
 			}
-			//ctx.DrawImage (cow, 20, 20);
+			ctx.Restore ();
+
 		}
 	}
 }

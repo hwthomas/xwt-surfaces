@@ -32,6 +32,7 @@ namespace Xwt.Backends
 		public abstract object CreateSurface (double width, double height, double scaleFactor);
 		public abstract object CreateSurfaceCompatibleWithWidget (object widgetBackend, double width, double height);
 		public abstract object CreateSurfaceCompatibleWithSurface (object surfaceBackend, double width, double height);
+		public abstract object CreateSurfaceCompatibleWithContext (object contextBackend, double width, double height); 
 		public abstract object CreateContext (object backend);
 	}
 }
