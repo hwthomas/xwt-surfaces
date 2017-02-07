@@ -36,7 +36,7 @@ namespace Samples
 			Button run = new Button ("Run Test");
 			PackStart (run);
 
-			Label results = new Label ("Number of DrawCalls: 0 \t Time taken: 0mS");
+			Label results = new Label (" Size (1 x 1)\t DrawCalls: 0 \t Time: 0mS");
 			PackStart (results);
 
 			var st = new SurfaceTest ();
@@ -49,7 +49,7 @@ namespace Samples
 
 			st.TestFinished += delegate {
 				run.Sensitive = true;
-				results.Text = string.Format (" Number of DrawCalls: {0} \t Time taken: {1} mS", st.DrawCalls, st.DrawTime);
+				results.Text = string.Format (" Size ({0}x{1}) \tDrawCalls: {2} \tTime: {3} mS", st.Width, st.Height, st.DrawCalls, st.DrawTime);
 				Console.WriteLine (results.Text);
 			};
 		}
@@ -65,10 +65,10 @@ namespace Samples
 		Image cow;
 
 		Surface cache = null;
-		double width;
-		double height;
 
 		public int DrawCalls { get; private set; }			// number of drawing calls
+		public double Width { get; private set; }			// Canvas dimensions
+		public double Height { get; private set; }
 		public double DrawTime { get; private set; }		// drawing directly to Canvas
 		public double BitmapTime { get; private set; }		// 
 		public double ImageTime { get; private set; }
@@ -78,22 +78,22 @@ namespace Samples
 
 		public SurfaceTest ()
 		{
-			width = Bounds.Width;
-			height = Bounds.Height;
-			cow = Image.FromResource ("cow.jpg").WithBoxSize (Math.Max (width, height) - 50);
-			var ib = new ImageBuilder (width, height);
+			Width = Bounds.Width;
+			Height = Bounds.Height;
+			cow = Image.FromResource ("cow.jpg").WithBoxSize (Math.Max (Width, Height) - 50);
+			var ib = new ImageBuilder (Width, Height);
 			DrawScene (ib.Context);
 			bitmap = ib.ToBitmap ();
 			vectorImage = ib.ToVectorImage ();
-			WidthRequest = width;
-			HeightRequest = height;
-			DrawCalls = 1000;
+			WidthRequest = Width;
+			HeightRequest = Height;
+			DrawCalls = 100;
 		}
 
 		public void StartTest ()
 		{
-			width = Bounds.Width;
-			height = Bounds.Height;
+			Width = Bounds.Width;
+			Height = Bounds.Height;
 			testMode = true;
 			QueueDraw ();
 		}
@@ -101,20 +101,22 @@ namespace Samples
 		protected override void OnBoundsChanged ()
 		{
 			base.OnBoundsChanged ();
-			cache = null;		// ensure new cache created
+			cache = null;		// ensure new cache is created
 		}
 
 		protected override void OnDraw (Context ctx, Rectangle dirtyRect)
 		{
-			width = Bounds.Width;
-			height = Bounds.Height;
+			Context sc;		// cache Context
+
+			Width = Bounds.Width;
+			Height = Bounds.Height;
 			// If creating cache from Context ctx, it can only be set up here on the first OnDraw call
 			// By initialising it to null when SurfaceTest is created, any type of surface cache can be used
 			if (cache == null) {
-				Size s = new Size (width, height);
+				Size s = new Size (Width, Height);
 				//cache = new Surface (s, this);	// surface compatible with Canvas (this)
 				cache = new Surface (s, ctx);		// surface compatible with Context (ctx)
-				var sc = cache.Context;
+				sc = cache.Context;
 				DrawScene (sc);						// use context to draw (once) to cache
 			}
 			ctx.DrawSurface (cache, 0, 0);			// copy from cache to Canvas on first OnDraw call
@@ -127,8 +129,10 @@ namespace Samples
 
 			//BitmapTime = TimedDraw (delegate { ctx.DrawImage (bitmap, 0, 0);});	// draw image from Bitmap cache
 			//ImageTime = TimedDraw (delegate { ctx.DrawImage (vectorImage, 0, 0);});	// draw image from Vector cache
+			//DrawTime = TimedDraw (delegate { DrawScene (ctx); });   // draw to OnDraw context
 
-			DrawTime = TimedDraw (delegate { DrawScene (ctx);});	// draw to context
+			DrawTime = TimedDraw (delegate { ctx.DrawSurface (cache, 0, 0); });   // copy from cache
+
 
 			testMode = false;
 			if (TestFinished != null)
@@ -157,8 +161,8 @@ namespace Samples
 			double wn;
 
 			ctx.Save ();
-			ctx.Scale (1.0, height/width);  // scale for width and height
-			centre = width / 2.0;
+			ctx.Scale (1.0, Height/Width);  // scale for width and height
+			centre = Width / 2.0;
 			ctx.SetLineWidth (1.0);			// Note - this is also scaled
 			   
 			for (int n = 1; n <= iterations; n += 1) {
@@ -166,13 +170,13 @@ namespace Samples
 				// (1) draw rectangles
 				ctx.SetColor (Colors.Blue);
 				x0 = 0;
-				wn = width * n / iterations;
+				wn = Width * n / iterations;
 				ctx.Rectangle (x0, x0, wn, wn );
 				ctx.Stroke ();
 				// (2) draw ellipses
 				ctx.SetColor (Colors.Green);
 				x0 = centre;
-				radius = 0.5 * width * n / iterations;
+				radius = 0.5 * Width * n / iterations;
 				ctx.Arc (x0, x0, radius, 0, 360);
 				ctx.Stroke ();
 			}
