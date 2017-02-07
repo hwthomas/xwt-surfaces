@@ -30,7 +30,7 @@ using Xwt.Backends;
 namespace Xwt.Drawing
 {
 	/// <summary>
-	/// A surface is an off-screen drawing buffer
+	/// A surface is an off-screen drawing buffer, from which a Drawing Context can be obtained
 	/// </summary>
 	public class Surface: XwtObject, IDisposable
 	{
@@ -44,23 +44,21 @@ namespace Xwt.Drawing
 			Init (ToolkitEngine.SurfaceBackendHandler.CreateSurface (size.Width, size.Height, scaleFactor), size);
 		}
 
+		// Create default surface with specified width, height, and scalefactor
 		public Surface (double width, double height, double scaleFactor = 1): this (new Size (width, height), scaleFactor)
 		{
 		}
 
 
-		// Create surface with specified size, and compatible with specified Canvas 
+		// Create surface with specified size, and compatible with supplied Canvas (widget)
 		public Surface (Size size, Canvas canvas)
 		{
-			//Init (ToolkitEngine.SurfaceBackendHandler.CreateSurfaceCompatibleWithWidget (canvas.GetBackend (), size.Width, size.Height), size);
-			var o = ToolkitEngine.SurfaceBackendHandler.CreateSurfaceCompatibleWithWidget (canvas.GetBackend (), size.Width, size.Height);
-			Init (o, size);
+			Init (ToolkitEngine.SurfaceBackendHandler.CreateSurfaceCompatibleWithWidget (canvas.GetBackend (), size.Width, size.Height), size);
 		}
 
 		public Surface (double width, double height, Canvas canvas): this (new Size (width, height), canvas)
 		{
 		}
-
 
 
 		// Create surface with specified size, and compatible with specified Surface 
@@ -74,32 +72,35 @@ namespace Xwt.Drawing
 		}
 
 
-
-		// Create surface with specified size, and compatible with surface from specified Context 
+		// Create surface with specified size, and compatible with surface from supplied Context 
 		public Surface (Size size, Context ctx)
 		{
-			//Init (ToolkitEngine.SurfaceBackendHandler.CreateSurfaceCompatibleWithContext (ctx.GetBackend (), size.Width, size.Height), size);
-			var contextBackend = ctx.GetBackend ();
-			var o = ToolkitEngine.SurfaceBackendHandler.CreateSurfaceCompatibleWithContext (contextBackend, size.Width, size.Height);
-			Init (o, size);
+			Init (ToolkitEngine.SurfaceBackendHandler.CreateSurfaceCompatibleWithContext (ctx.GetBackend (), size.Width, size.Height), size);
+			//var contextBackend = ctx.GetBackend ();
+			//var o = ToolkitEngine.SurfaceBackendHandler.CreateSurfaceCompatibleWithContext (contextBackend, size.Width, size.Height);
+			//Init (o, size);
 		}
 
-		internal void Init (object backend, Size s)
-		{
-			this.size = s;
-			Backend = backend;
-			if (ToolkitEngine.SurfaceBackendHandler.DisposeHandleOnUiThread)
-				ResourceManager.RegisterResource (backend, ToolkitEngine.SurfaceBackendHandler.Dispose);
-			else
-				GC.SuppressFinalize (this);
-		}
 
+		// Create drawing context for surface if not already set up
 		public Context Context {
 			get {
 				if (this.ctx == null)
 					this.ctx = new Context (ToolkitEngine.SurfaceBackendHandler.CreateContext (Backend), ToolkitEngine);
 				return this.ctx;
 			}
+		}
+
+
+
+		internal void Init (object backend, Size s)
+		{
+			size = s;
+			Backend = backend;
+			if (ToolkitEngine.SurfaceBackendHandler.DisposeHandleOnUiThread)
+				ResourceManager.RegisterResource (backend, ToolkitEngine.SurfaceBackendHandler.Dispose);
+			else
+				GC.SuppressFinalize (this);
 		}
 
 		public double Width {

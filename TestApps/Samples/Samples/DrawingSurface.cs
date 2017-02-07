@@ -36,7 +36,7 @@ namespace Samples
 			Button run = new Button ("Run Test");
 			PackStart (run);
 
-			Label results = new Label ("Number of DrawCalls: 0 \t Time taken: 0mS");
+			Label results = new Label (" Size (1 x 1)\t DrawCalls: 0 \t Time: 0mS");
 			PackStart (results);
 
 			var st = new SurfaceTest ();
@@ -49,7 +49,7 @@ namespace Samples
 
 			st.TestFinished += delegate {
 				run.Sensitive = true;
-				results.Text = string.Format (" Number of DrawCalls: {0} \t Time taken: {1} mS", st.DrawCalls, st.DrawTime);
+				results.Text = string.Format (" Size ({0}x{1}) \tDrawCalls: {2} \tTime: {3} mS", st.Width, st.Height, st.DrawCalls, st.DrawTime);
 				Console.WriteLine (results.Text);
 			};
 		}
@@ -65,10 +65,10 @@ namespace Samples
 		Image cow;
 
 		Surface cache = null;
-		double width;
-		double height;
 
 		public int DrawCalls { get; private set; }			// number of drawing calls
+		public double Width { get; private set; }			// Canvas dimensions
+		public double Height { get; private set; }
 		public double DrawTime { get; private set; }		// drawing directly to Canvas
 		public double BitmapTime { get; private set; }		// 
 		public double ImageTime { get; private set; }
@@ -78,22 +78,22 @@ namespace Samples
 
 		public SurfaceTest ()
 		{
-			width = Bounds.Width;
-			height = Bounds.Height;
-			cow = Image.FromResource ("cow.jpg").WithBoxSize (Math.Max (width, height) - 50);
-			var ib = new ImageBuilder (width, height);
-			DrawScene (ib.Context);
+			Width = Bounds.Width;
+			Height = Bounds.Height;
+			cow = Image.FromResource ("cow.jpg").WithBoxSize (Math.Max (Width, Height) - 50);
+			var ib = new ImageBuilder (Width, Height);
+			DrawScene (ib.Context, Width, Height);
 			bitmap = ib.ToBitmap ();
 			vectorImage = ib.ToVectorImage ();
-			WidthRequest = width;
-			HeightRequest = height;
-			DrawCalls = 1000;
+			WidthRequest = Width;
+			HeightRequest = Height;
+			DrawCalls = 100;
 		}
 
 		public void StartTest ()
 		{
-			width = Bounds.Width;
-			height = Bounds.Height;
+			Width = Bounds.Width;
+			Height = Bounds.Height;
 			testMode = true;
 			QueueDraw ();
 		}
@@ -101,34 +101,39 @@ namespace Samples
 		protected override void OnBoundsChanged ()
 		{
 			base.OnBoundsChanged ();
-			cache = null;		// ensure new cache created
+			cache = null;		// ensure new cache is created
 		}
 
 		protected override void OnDraw (Context ctx, Rectangle dirtyRect)
 		{
-			width = Bounds.Width;
-			height = Bounds.Height;
+			Context sc = null;		// cache Context
+
+			Width = Bounds.Width;
+			Height = Bounds.Height;
 			// If creating cache from Context ctx, it can only be set up here on the first OnDraw call
 			// By initialising it to null when SurfaceTest is created, any type of surface cache can be used
 			if (cache == null) {
-				Size s = new Size (width, height);
+				Size s = new Size (Width, Height);
 				//cache = new Surface (s, this);	// surface compatible with Canvas (this)
 				cache = new Surface (s, ctx);		// surface compatible with Context (ctx)
-				var sc = cache.Context;
-				DrawScene (sc);						// use context to draw (once) to cache
+				sc = cache.Context;
+				DrawScene (sc, Width, Height);		// use context to draw (once) to cache
 			}
 			ctx.DrawSurface (cache, 0, 0);			// copy from cache to Canvas on first OnDraw call
 
 			if (!testMode)
 				return;
 
-			//DrawTime = TimedDraw (delegate { DrawScene (ctx);});		// draw scene to Canvas
-			//DrawTime = TimedDraw (delegate { DrawScene (cctx);});		// draw scene to Cache
 
-			//BitmapTime = TimedDraw (delegate { ctx.DrawImage (bitmap, 0, 0);});	// draw image from Bitmap cache
-			//ImageTime = TimedDraw (delegate { ctx.DrawImage (vectorImage, 0, 0);});	// draw image from Vector cache
+			// Various timed drawings/copies for comparison
+			//DrawTime = TimedDraw (delegate { DrawScene (ctx, Width, Height);});		// draw scene direct to Canvas
+			//DrawTime = TimedDraw (delegate { DrawScene (cctx, Width, Height);});		// draw scene to Cache
 
-			DrawTime = TimedDraw (delegate { DrawScene (ctx);});	// draw to context
+			//BitmapTime = TimedDraw (delegate { ctx.DrawImage (bitmap, 0, 0);});		// copy image from Bitmap cache
+			//ImageTime = TimedDraw (delegate { ctx.DrawImage (vectorImage, 0, 0);});	// copy image from Vector cache
+
+			DrawTime = TimedDraw (delegate { ctx.DrawSurface (cache, 0, 0); });  		// copy from Surface cache
+
 
 			testMode = false;
 			if (TestFinished != null)
@@ -146,7 +151,7 @@ namespace Samples
 			return (DateTime.Now - t).TotalMilliseconds;
 		}
 
-		void DrawScene (Context ctx)
+		void DrawScene (Context ctx, double width, double height)
 		{
 			// Draw a fairly complicated 'background' scene
 
