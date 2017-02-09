@@ -187,7 +187,7 @@ namespace Xwt.Mac
 				StyleMask |= NSWindowStyle.Miniaturizable;
 			Visible = true;
 			modalSessionRunning = true;
-			var win = parent as NSWindow ?? Toolkit.CurrentEngine.GetNativeWindow (parent) as NSWindow;
+			var win = parent as NSWindow ?? ApplicationContext.Toolkit.GetNativeWindow (parent) as NSWindow;
 			if (win != null) {
 				win.AddChildWindow (this, NSWindowOrderingMode.Above);
 				// always use NSWindow for alignment when running in guest mode and
@@ -210,6 +210,7 @@ namespace Xwt.Mac
 			if (parent != null)
 				parent.RemoveChildWindow (this);
 			OrderOut (this);
+			Close();
 			NSApplication.SharedApplication.StopModal ();
 			if (parent != null)
 				parent.MakeKeyAndOrderFront (parent);
