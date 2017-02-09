@@ -106,8 +106,7 @@ namespace Samples
 
 		protected override void OnDraw (Context ctx, Rectangle dirtyRect)
 		{
-			Context sc = null;		// cache Context
-
+			Context sc = null;	// cache Context
 			Width = Bounds.Width;
 			Height = Bounds.Height;
 			// If creating cache from Context ctx, it can only be set up here on the first OnDraw call
@@ -124,7 +123,6 @@ namespace Samples
 			if (!testMode)
 				return;
 
-
 			// Various timed drawings/copies for comparison
 			//DrawTime = TimedDraw (delegate { DrawScene (ctx, Width, Height);});		// draw scene direct to Canvas
 			//DrawTime = TimedDraw (delegate { DrawScene (cctx, Width, Height);});		// draw scene to Cache
@@ -133,7 +131,6 @@ namespace Samples
 			//ImageTime = TimedDraw (delegate { ctx.DrawImage (vectorImage, 0, 0);});	// copy image from Vector cache
 
 			DrawTime = TimedDraw (delegate { ctx.DrawSurface (cache, 0, 0); });  		// copy from Surface cache
-
 
 			testMode = false;
 			if (TestFinished != null)
@@ -162,8 +159,8 @@ namespace Samples
 			double wn;
 
 			ctx.Save ();
-			ctx.Scale (1.0, height/width);  // scale for width and height
-			centre = width / 2.0;
+			ctx.Scale (1.0, Height/Width);  // scale for width and height
+			centre = Width / 2.0;
 			ctx.SetLineWidth (1.0);			// Note - this is also scaled
 			   
 			for (int n = 1; n <= iterations; n += 1) {
@@ -171,13 +168,13 @@ namespace Samples
 				// (1) draw rectangles
 				ctx.SetColor (Colors.Blue);
 				x0 = 0;
-				wn = width * n / iterations;
+				wn = Width * n / iterations;
 				ctx.Rectangle (x0, x0, wn, wn );
 				ctx.Stroke ();
 				// (2) draw ellipses
 				ctx.SetColor (Colors.Green);
 				x0 = centre;
-				radius = 0.5 * width * n / iterations;
+				radius = 0.5 * Width * n / iterations;
 				ctx.Arc (x0, x0, radius, 0, 360);
 				ctx.Stroke ();
 			}

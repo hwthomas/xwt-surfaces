@@ -72,6 +72,7 @@ namespace Xwt.Drawing
 		}
 
 
+
 		// Create surface with specified size, and compatible with surface from supplied Context 
 		public Surface (Size size, Context ctx)
 		{
