@@ -376,11 +376,6 @@ namespace Xwt.Mac
 			return m;
 		}
 
-		public static double GetScaleFactor (NSView view)
-		{
-			return 1d;	// leftover from surfaces?
-		}
-
 		public static NSTableViewGridStyle ToMacValue (this GridLines value)
 		{
 			switch (value)
@@ -476,9 +471,7 @@ namespace Xwt.Mac
 				ciCtx.DrawImage (ciImage, new CGRect (CGPoint.Empty, size), new CGRect (CGPoint.Empty, displaySize));
 			} else
 				drawDelegate();
-			}
 		}
-
 
 		public static CGPoint ConvertPointFromEvent(this NSView view, NSEvent theEvent)
 		{
@@ -490,6 +483,14 @@ namespace Xwt.Mac
 			}
 			return view.ConvertPointFromView(point, null);
 		}
+
+
+		public static double GetScaleFactor (NSView view)
+		{
+			return 1d;  // leftover from surfaces branch? Is it needed now? HWT
+		}
+
+
 	}
 
 	public interface ICopiableObject
