@@ -113,8 +113,8 @@ namespace Samples
 			// By initialising it to null when SurfaceTest is created, any type of surface cache can be used
 			if (cache == null) {
 				Size s = new Size (Width, Height);
-				//cache = new Surface (s, this);	// surface compatible with Canvas (this)
-				cache = new Surface (s, ctx);		// surface compatible with Context (ctx)
+				cache = new Surface (s, this);	// surface compatible with Canvas (this)
+				//cache = new Surface (s, ctx);		// surface compatible with Context (ctx)
 				sc = cache.Context;
 				DrawScene (sc, Width, Height);		// use context to draw (once) to cache
 			}

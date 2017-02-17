@@ -58,7 +58,8 @@ namespace Xwt.GtkBackend
 
 			// There is a bug in Cairo for OSX right now that prevents creating additional accellerated surfaces.
 			if (Platform.IsMac) {
-				return new QuartzSurface (Cairo.Format.ARGB32, (int)width, (int)height);
+				//return new QuartzSurface (Cairo.Format.ARGB32, (int)width, (int)height);
+				return new Cairo.ImageSurface(Cairo.Format.ARGB32, (int)width, (int)height);
 			} else if (Platform.IsWindows) {
 				using (var similar = Gdk.CairoHelper.Create (widget.GdkWindow))
 				using (var target = similar.GetTarget ()) {
