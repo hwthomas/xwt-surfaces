@@ -298,7 +298,8 @@ namespace Xwt.Mac
 			gc.Damaged = true;
 			CGContext ctx = gc.Context;
 			var ms = (MacSurface)surface;
-			ctx.DrawImage (new RectangleF ((float)x, (float)y, ms.Image.Width, ms.Image.Height), ms.Image);
+			CGRect r = new CGRect((nfloat)x, (nfloat)y, ms.Image.Width, ms.Image.Height);
+			ctx.DrawImage (r, ms.Image);
 		}
 
 		public override void DrawImage (object backend, ImageDescription img, double x, double y)

@@ -25,8 +25,8 @@
 // THE SOFTWARE.
 using System;
 using Xwt.Backends;
-using MonoMac.CoreGraphics;
-using MonoMac.AppKit;
+using CoreGraphics;
+using AppKit;
 
 namespace Xwt.Mac
 {
@@ -59,6 +59,12 @@ namespace Xwt.Mac
 		{
 			throw new NotSupportedException ();
 		}
+
+		public override object CreateSurfaceCompatibleWithContext(object contextBackend, double width, double height)
+		{
+			throw new NotSupportedException();
+		}
+
 
 		public override object CreateContext (object backend)
 		{
