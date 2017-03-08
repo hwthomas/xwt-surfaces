@@ -129,14 +129,23 @@ namespace Xwt.Mac
 
 		public static Color ToXwtColor (this NSColor col)
 		{
-			col = col.UsingColorSpace (DeviceRGBString);
-			return new Color (col.RedComponent, col.GreenComponent, col.BlueComponent, col.AlphaComponent);
+			var calibrated = col.UsingColorSpace (DeviceRGBString);
+			if (calibrated != null)
+				return new Color (calibrated.RedComponent, calibrated.GreenComponent, calibrated.BlueComponent, calibrated.AlphaComponent);
+			// some system colors can not be calibrated and UsingColorSpace returns null.
+			// Use CGColor in this case, which should match the device already.
+			return col.CGColor.ToXwtColor();
 		}
 		
 		public static Color ToXwtColor (this CGColor col)
 		{
 			var cs = col.Components;
 			return new Color (cs[0], cs[1], cs[2], col.Alpha);
+		}
+
+		public static CGSize ToCGSize (this Size s)
+		{
+			return new CGSize ((nfloat)s.Width, (nfloat)s.Height);
 		}
 
 		public static Size ToXwtSize (this CGSize s)
@@ -250,6 +259,45 @@ namespace Xwt.Mac
 		public static int ToUnderlineStyle (FontStyle style)
 		{
 			return 1;
+		}
+
+		public static int ToMacValue (this FontWeight weight)
+		{
+			switch (weight) {
+			case FontWeight.Thin:
+				return 1;
+			case FontWeight.Ultralight:
+				return 2;
+			case FontWeight.Light:
+				return 3;
+			case FontWeight.Book:
+				return 4;
+			case FontWeight.Normal:
+				return 5;
+			case FontWeight.Medium:
+				return 6;
+			case FontWeight.Semibold:
+				return 8;
+			case FontWeight.Bold:
+				return 9;
+			case FontWeight.Ultrabold:
+				return 10;
+			case FontWeight.Heavy:
+				return 11;
+			case FontWeight.Ultraheavy:
+				return 12;
+			default:
+				return 13;
+			}
+		}
+
+		public static NSFont WithWeight (this NSFont font, FontWeight weight)
+		{
+			int w = weight.ToMacValue ();
+			var traits = NSFontManager.SharedFontManager.TraitsOfFont (font);
+			traits |= weight >= FontWeight.Bold? NSFontTraitMask.Bold : NSFontTraitMask.Unbold;
+			traits &= weight >= FontWeight.Bold? ~NSFontTraitMask.Unbold : ~NSFontTraitMask.Bold;
+			return NSFontManager.SharedFontManager.FontWithFamily (font.FamilyName, traits, w, font.PointSize);
 		}
 
 		static Selector applyFontTraits = new Selector ("applyFontTraits:range:");
