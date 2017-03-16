@@ -3,6 +3,7 @@
 //
 // Author:
 //       Lluis Sanchez Gual <lluis@xamarin.com>
+//  	 Hywel Thomas <hywel.w.thomas@gmail.com>
 //
 // Copyright (c) 2013 Xamarin, Inc (http://www.xamarin.com)
 //
@@ -30,45 +31,67 @@ using AppKit;
 
 namespace Xwt.Mac
 {
-	public class MacSurfaceBackendHandler: SurfaceBackendHandler
+	public class MacSurfaceBackendHandler : SurfaceBackendHandler
 	{
-		public override object CreateSurface (double width, double height, double scaleFactor)
+		public override object CreateSurface(double width, double height, double scaleFactor)
 		{
 			int pixelWidth = (int)(width * scaleFactor);
 			int pixelHeight = (int)(height * scaleFactor);
 			int bytesPerRow = pixelWidth * 4;
 			var flags = CGBitmapFlags.ByteOrderDefault | CGBitmapFlags.PremultipliedFirst;
 
-			var bmp = new CGBitmapContext (IntPtr.Zero, pixelWidth, pixelHeight, 8, bytesPerRow, Util.DeviceRGBColorSpace, flags);
+			var bmp = new CGBitmapContext(IntPtr.Zero, pixelWidth, pixelHeight, 8, bytesPerRow, Util.DeviceRGBColorSpace, flags);
 			//			bmp.TranslateCTM (0, pixelHeight);
 			//bmp.ScaleCTM ((float)scaleFactor, (float)-scaleFactor);
-			return new MacSurface {
-				Context = new CGContextBackend {
+			var ms = new MacSurface
+			{
+				Context = new CGContextBackend
+				{
 					Context = bmp
 				}
 			};
+			return ms;
 		}
 
-		public override object CreateSurfaceCompatibleWithWidget (object widgetBackend, double width, double height)
+		public override object CreateSurfaceCompatibleWithWidget(object widgetBackend, double width, double height)
 		{
 			ViewBackend view = (ViewBackend)widgetBackend;
-			return CreateSurface (width, height, Util.GetScaleFactor (view.Widget));
+			return CreateSurface(width, height, Util.GetScaleFactor(view.Widget));
 		}
 
-		public override object CreateSurfaceCompatibleWithSurface (object surfaceBackend, double width, double height)
-		{
-			throw new NotSupportedException ();
-		}
-
-		public override object CreateSurfaceCompatibleWithContext(object contextBackend, double width, double height)
+		public override object CreateSurfaceCompatibleWithSurface(object surfaceBackend, double width, double height)
 		{
 			throw new NotSupportedException();
 		}
 
-
-		public override object CreateContext (object backend)
+		public override object CreateSurfaceCompatibleWithContext(object contextBackend, double width, double height)
 		{
-			return ((MacSurface)backend).Context;
+			CGContext ctx = ((CGContextBackend)contextBackend).Context;
+			var layer = CGLayer.Create(ctx, new CGSize(width, height));
+
+			var ct = new CGContextBackend {
+				Context = layer.Context
+			};
+
+			var ms = new MacSurface {
+				Layer = layer,      // set up CGLayer within MacSurface
+				Context = ct
+			};
+			return ms;
+
+		}
+
+
+		public override object CreateContext(object backend)
+		{
+			var ms = (MacSurface)backend;
+			var ctx = ms.Context;
+
+			if (ms.Layer != null) {
+				ctx.Context = ms.Layer.Context;
+			}
+			return ms.Context;
+
 		}
 	}
 
@@ -76,6 +99,7 @@ namespace Xwt.Mac
 	{
 		CGImage image;
 
+		public CGLayer Layer;
 		public CGContextBackend Context;
 
 		public CGImage Image {

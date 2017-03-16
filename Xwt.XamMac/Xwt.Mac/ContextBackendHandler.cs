@@ -297,9 +297,14 @@ namespace Xwt.Mac
 			CGContextBackend gc = (CGContextBackend)backend;
 			gc.Damaged = true;
 			CGContext ctx = gc.Context;
+
 			var ms = (MacSurface)surface;
-			CGRect r = new CGRect((nfloat)x, (nfloat)y, ms.Image.Width, ms.Image.Height);
-			ctx.DrawImage (r, ms.Image);
+			if (ms.Layer == null) {
+				CGRect r = new CGRect((nfloat)x, (nfloat)y, ms.Image.Width, ms.Image.Height);
+				ctx.DrawImage(r, ms.Image);
+			} else {
+				ctx.DrawLayer (ms.Layer, new  CGPoint(x, y));
+			}
 		}
 
 		public override void DrawImage (object backend, ImageDescription img, double x, double y)
