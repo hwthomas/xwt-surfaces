@@ -3,6 +3,7 @@
 //
 // Author:
 //       Lluis Sanchez Gual <lluis@xamarin.com>
+//  	 Hywel Thomas <hywel.w.thomas@gmail.com>
 //
 // Copyright (c) 2013 Xamarin, Inc (http://www.xamarin.com)
 //
@@ -80,11 +81,6 @@ namespace Samples
 		{
 			Width = Bounds.Width;
 			Height = Bounds.Height;
-			cow = Image.FromResource ("cow.jpg").WithBoxSize (Math.Max (Width, Height) - 50);
-			var ib = new ImageBuilder (Width, Height);
-			DrawScene (ib.Context, Width, Height);
-			bitmap = ib.ToBitmap ();
-			vectorImage = ib.ToVectorImage ();
 			WidthRequest = Width;
 			HeightRequest = Height;
 			DrawCalls = 100;
@@ -113,8 +109,9 @@ namespace Samples
 			// By initialising it to null when SurfaceTest is created, any type of surface cache can be used
 			if (cache == null) {
 				Size s = new Size (Width, Height);
-				cache = new Surface (s, this);	// surface compatible with Canvas (this)
-				//cache = new Surface (s, ctx);		// surface compatible with Context (ctx)
+				//cache = new Surface(s);       		// default surface
+				cache = new Surface (s, this);		// widget-compatible surface
+				cache = new Surface (s, ctx);		// surface compatible with Context (ctx)
 				sc = cache.Context;
 				DrawScene (sc, Width, Height);		// use context to draw (once) to cache
 			}
@@ -125,6 +122,7 @@ namespace Samples
 
 			// Various timed drawings/copies for comparison
 			//DrawTime = TimedDraw (delegate { DrawScene (ctx, Width, Height);});		// draw scene direct to Canvas
+
 			//DrawTime = TimedDraw (delegate { DrawScene (cctx, Width, Height);});		// draw scene to Cache
 
 			//BitmapTime = TimedDraw (delegate { ctx.DrawImage (bitmap, 0, 0);});		// copy image from Bitmap cache
