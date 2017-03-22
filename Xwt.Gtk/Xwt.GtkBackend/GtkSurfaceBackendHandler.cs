@@ -3,6 +3,7 @@
 //
 // Author:
 //       Lluis Sanchez Gual <lluis@xamarin.com>
+//  	 Hywel Thomas <hywel.w.thomas@gmail.com>
 //
 // Copyright (c) 2013 Xamarin, Inc (http://www.xamarin.com)
 //
