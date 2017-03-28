@@ -119,7 +119,7 @@ namespace Samples
 			// Various timed drawings/copies for comparison
 			//DrawTime = TimedDraw (delegate { DrawScene (ctx, Width, Height);});		// draw scene direct to Canvas
 
-			//DrawTime = TimedDraw (delegate { DrawScene (cctx, Width, Height);});		// draw scene to Cache
+			//DrawTime = TimedDraw (delegate { DrawScene (sc, Width, Height);});		// draw scene to Cache
 
 			//BitmapTime = TimedDraw (delegate { ctx.DrawImage (bitmap, 0, 0);});		// copy image from Bitmap cache
 			//ImageTime = TimedDraw (delegate { ctx.DrawImage (vectorImage, 0, 0);});	// copy image from Vector cache
