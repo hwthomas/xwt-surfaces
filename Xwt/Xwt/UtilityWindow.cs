@@ -1,10 +1,10 @@
 ﻿//
-// NSApplicationInitializer.cs
+// UtilityWindow.cs
 //
 // Author:
-//       Lluis Sanchez Gual <lluis@xamarin.com>
+//       Vsevolod Kukol <sevoku@microsoft.com>
 //
-// Copyright (c) 2016 Xamarin, Inc (http://www.xamarin.com)
+// Copyright (c) 2017 Microsoft Corporation
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -24,21 +24,34 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-using AppKit;
-
-namespace Xwt.Mac
+using Xwt.Backends;
+namespace Xwt
 {
-	static class NSApplicationInitializer
+	[BackendType (typeof (IUtilityWindowBackend))]
+	public class UtilityWindow : Window
 	{
-		public static void Initialize ()
+		public UtilityWindow () : base (0)
 		{
-			var ds = System.Threading.Thread.GetNamedDataSlot ("NSApplication.Initialized");
-			if (System.Threading.Thread.GetData (ds) == null) {
-				System.Threading.Thread.SetData (ds, true);
-				NSApplication.IgnoreMissingAssembliesDuringRegistration = true;
-				NSApplication.Init ();
+		}
+
+		protected new class WindowBackendHost : Window.WindowBackendHost
+		{
+			new UtilityWindow Parent { get { return (UtilityWindow)base.Parent; } }
+
+			protected override void OnBackendCreated ()
+			{
+				base.OnBackendCreated ();
+				((IUtilityWindowBackend)Backend).Initialize (this);
 			}
+		}
+
+		protected override BackendHost CreateBackendHost ()
+		{
+			return new WindowBackendHost ();
+		}
+
+		IUtilityWindowBackend Backend {
+			get { return (IUtilityWindowBackend)BackendHost.Backend; }
 		}
 	}
 }
-

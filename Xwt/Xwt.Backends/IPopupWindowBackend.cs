@@ -1,10 +1,10 @@
 ﻿//
-// NSApplicationInitializer.cs
+// IPopupWindowBackend.cs
 //
 // Author:
-//       Lluis Sanchez Gual <lluis@xamarin.com>
+//       Vsevolod Kukol <sevoku@microsoft.com>
 //
-// Copyright (c) 2016 Xamarin, Inc (http://www.xamarin.com)
+// Copyright (c) 2017 (c) Microsoft Corporation
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -24,21 +24,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-using AppKit;
-
-namespace Xwt.Mac
+namespace Xwt.Backends
 {
-	static class NSApplicationInitializer
+	public interface IPopupWindowBackend : IWindowBackend
 	{
-		public static void Initialize ()
-		{
-			var ds = System.Threading.Thread.GetNamedDataSlot ("NSApplication.Initialized");
-			if (System.Threading.Thread.GetData (ds) == null) {
-				System.Threading.Thread.SetData (ds, true);
-				NSApplication.IgnoreMissingAssembliesDuringRegistration = true;
-				NSApplication.Init ();
-			}
-		}
+		void Initialize (IWindowFrameEventSink sink, PopupWindow.PopupType type);
 	}
 }
-

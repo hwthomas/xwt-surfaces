@@ -1,10 +1,10 @@
 ﻿//
-// NSApplicationInitializer.cs
+// PopupWindowBackend.cs
 //
 // Author:
-//       Lluis Sanchez Gual <lluis@xamarin.com>
+//       Vsevolod Kukol <sevoku@microsoft.com>
 //
-// Copyright (c) 2016 Xamarin, Inc (http://www.xamarin.com)
+// Copyright (c) 2017 Microsoft Corporation
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -24,21 +24,40 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-using AppKit;
+using Xwt.Backends;
 
-namespace Xwt.Mac
+namespace Xwt.GtkBackend
 {
-	static class NSApplicationInitializer
+	public class PopupWindowBackend : WindowBackend, IPopupWindowBackend
 	{
-		public static void Initialize ()
+		PopupWindow.PopupType windowType;
+
+		public override void Initialize ()
 		{
-			var ds = System.Threading.Thread.GetNamedDataSlot ("NSApplication.Initialized");
-			if (System.Threading.Thread.GetData (ds) == null) {
-				System.Threading.Thread.SetData (ds, true);
-				NSApplication.IgnoreMissingAssembliesDuringRegistration = true;
-				NSApplication.Init ();
+			Window = new GtkPopoverWindow (Gtk.WindowType.Toplevel);
+			Window.TypeHint = Gdk.WindowTypeHint.Utility;
+			Window = new GtkPopoverWindow (windowType == PopupWindow.PopupType.Tooltip ? Gtk.WindowType.Popup : Gtk.WindowType.Toplevel);
+
+			switch (windowType) {
+			case PopupWindow.PopupType.Tooltip:
+				Window.TypeHint = Gdk.WindowTypeHint.Tooltip;
+				Window.Decorated = false;
+				break;
+			case PopupWindow.PopupType.Menu:
+				Window.TypeHint = Gdk.WindowTypeHint.PopupMenu;
+				Window.Decorated = false;
+				break;
 			}
+
+			Window.SkipPagerHint = true;
+			Window.SkipTaskbarHint = true;
+			Window.Add (CreateMainLayout ());
+		}
+
+		void IPopupWindowBackend.Initialize (IWindowFrameEventSink sink, PopupWindow.PopupType type)
+		{
+			windowType = type;
+			((IWindowFrameBackend)this).Initialize (sink);
 		}
 	}
 }
-
