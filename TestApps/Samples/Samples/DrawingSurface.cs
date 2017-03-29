@@ -61,10 +61,6 @@ namespace Samples
 	{
 		bool testMode = false;
 
-		Image vectorImage;
-		Image bitmap;
-		Image cow;
-
 		Surface cache = null;
 
 		public int DrawCalls { get; private set; }			// number of drawing calls
@@ -110,7 +106,7 @@ namespace Samples
 			if (cache == null) {
 				Size s = new Size (Width, Height);
 				//cache = new Surface(s);       		// default surface
-				cache = new Surface (s, this);		// widget-compatible surface
+				//cache = new Surface (s, this);		// widget-compatible surface
 				cache = new Surface (s, ctx);		// surface compatible with Context (ctx)
 				sc = cache.Context;
 				DrawScene (sc, Width, Height);		// use context to draw (once) to cache
@@ -123,7 +119,7 @@ namespace Samples
 			// Various timed drawings/copies for comparison
 			//DrawTime = TimedDraw (delegate { DrawScene (ctx, Width, Height);});		// draw scene direct to Canvas
 
-			//DrawTime = TimedDraw (delegate { DrawScene (cctx, Width, Height);});		// draw scene to Cache
+			//DrawTime = TimedDraw (delegate { DrawScene (sc, Width, Height);});		// draw scene to Cache
 
 			//BitmapTime = TimedDraw (delegate { ctx.DrawImage (bitmap, 0, 0);});		// copy image from Bitmap cache
 			//ImageTime = TimedDraw (delegate { ctx.DrawImage (vectorImage, 0, 0);});	// copy image from Vector cache
