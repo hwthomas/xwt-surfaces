@@ -27,6 +27,7 @@
 // THE SOFTWARE.
 
 using System;
+using System.Linq;
 using AppKit;
 using CoreGraphics;
 using Foundation;
@@ -70,8 +71,11 @@ namespace Xwt.Mac
 
 		internal void AutosizeColumns ()
 		{
-			foreach (var col in TableColumns ())
+			var columns = TableColumns ();
+			foreach (var col in columns)
 				AutosizeColumn (col);
+			if (columns.Any (c => c.ResizingMask.HasFlag (NSTableColumnResizing.Autoresizing)))
+				SizeToFit ();
 		}
 
 		void AutosizeColumn (NSTableColumn tableColumn)
@@ -85,6 +89,8 @@ namespace Xwt.Mac
 					var cell = base.GetCell (column, i);
 					s.Width = (nfloat)Math.Max (s.Width, cell.CellSize.Width);
 				}
+				if (!tableColumn.ResizingMask.HasFlag (NSTableColumnResizing.Autoresizing))
+					tableColumn.Width = s.Width;
 			}
 			tableColumn.MinWidth = s.Width;
 		}
@@ -158,6 +164,7 @@ namespace Xwt.Mac
 			args.X = p.X;
 			args.Y = p.Y;
 			args.Button = PointerButton.Right;
+			args.IsContextMenuTrigger = theEvent.TriggersContextMenu ();
 			context.InvokeUserCode (delegate {
 				eventSink.OnButtonPressed (args);
 			});
@@ -184,6 +191,7 @@ namespace Xwt.Mac
 			args.X = p.X;
 			args.Y = p.Y;
 			args.Button = PointerButton.Left;
+			args.IsContextMenuTrigger = theEvent.TriggersContextMenu ();
 			context.InvokeUserCode (delegate {
 				eventSink.OnButtonPressed (args);
 			});
@@ -204,16 +212,12 @@ namespace Xwt.Mac
 
 		public override void MouseEntered (NSEvent theEvent)
 		{
-			context.InvokeUserCode (delegate {
-				eventSink.OnMouseEntered ();
-			});
+			context.InvokeUserCode (eventSink.OnMouseEntered);
 		}
 
 		public override void MouseExited (NSEvent theEvent)
 		{
-			context.InvokeUserCode (delegate {
-				eventSink.OnMouseExited ();
-			});
+			context.InvokeUserCode (eventSink.OnMouseExited);
 		}
 
 		public override void MouseMoved (NSEvent theEvent)
